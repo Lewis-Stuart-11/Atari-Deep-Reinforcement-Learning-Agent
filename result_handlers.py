@@ -1,4 +1,4 @@
-from optimal_game_parameters import optimal_game_parameters
+# Author Lewis Stuart 201262348
 
 import pandas as pd
 import xlsxwriter
@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+from optimal_game_parameters import optimal_game_parameters
 
 # Writes out the essential information of the training episodes to an excel file for each game
 def write_final_results(info_per_episode, default_atari_game, num_training_episodes):
