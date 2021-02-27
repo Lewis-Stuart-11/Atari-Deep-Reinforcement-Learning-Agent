@@ -11,12 +11,13 @@ np.random.seed(0)
 
 # Handles the gym environment and all properties regarding game states
 class EnvironmentManager():
-    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size):
+    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = gym.make(game).unwrapped
         self.env.seed(0)
         self.env.reset()
         self.done = False # Episode has not finished
+        self.colour_type = colour_type
 
         # The state return format
         self.screen_process_type = screen_process_type.lower().strip()
@@ -180,12 +181,21 @@ class EnvironmentManager():
         # Converts screen to a tensor
         screen = torch.from_numpy(screen)
 
-        # Use torchvision package to compose image transforms
-        resize = T.Compose([
-            T.ToPILImage()  # Firstly tensor is converted to a PIL image
-            , T.Resize((self.resize[0], self.resize[1])) # Resized to the size specified by the resize property
-            , T.ToTensor() # Transformed to a tensor
-        ])
+        if self.colour_type == "RGB":
+            resize = T.Compose([
+                T.ToPILImage()  # Firstly tensor is converted to a PIL image
+                , T.Resize((self.resize[0], self.resize[1]))  # Resized to the size specified by the resize property
+                , T.ToTensor()  # Transformed to a tensor
+            ])
+
+        else:
+            # Use torchvision package to compose image transforms
+            resize = T.Compose([
+                T.ToPILImage()  # Firstly tensor is converted to a PIL image
+                , T.Resize((self.resize[0], self.resize[1])) # Resized to the size specified by the resize property
+                , T.Grayscale(num_output_channels=1)
+                , T.ToTensor() # Transformed to a tensor
+            ])
 
         # Returned and an extra dimension is added as these will represent a batch of states
         return resize(screen).unsqueeze(0).to(self.device)

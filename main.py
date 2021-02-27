@@ -3,15 +3,12 @@
 import sys
 import time
 import random
-import numpy as np
+from collections import namedtuple
 import matplotlib.pyplot as plt
 from itertools import count
 import torch.optim as optim
 from torchviz import make_dot
-import pandas as pd
-from collections import namedtuple
-import xlsxwriter
-from openpyxl import load_workbook
+
 
 # Imports all policies that the agent can follow to achieve optimal actions
 from policies import *
@@ -25,6 +22,12 @@ from agents import *
 # Imports environment handlers that manage interactions with the environment
 from environment_handler import *
 
+# Imports game parameters which configure what properties to use
+from optimal_game_parameters import *
+
+# Imports functions for handling and visualising results
+from result_handlers import *
+
 # Ensures that graph vision can work correctly
 import os
 os.environ["PATH"] += os.pathsep + "C:\\Program Files\\Graphviz\\bin"
@@ -33,89 +36,11 @@ os.environ["PATH"] += os.pathsep + "C:\\Program Files\\Graphviz\\bin"
 random.seed(0)
 np.random.seed(0)
 
-# Creates a diagram of the current neural network
-show_neural_net = True
-
 # Lists all atari games the agent can interact with
 atari_games = ["SpaceInvaders-v0", "CartPole-v0", "Pong-v0", "BreakoutDeterministic-v4"]
 
 # Default game
 default_atari_game = "BreakoutDeterministic-v4"
-
-# Stores the optimal parameters for each available atari game
-OptimalParameters = namedtuple(
-    'OptimalParameters',
-    (
-     'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
-     'epsilon_values',  # Exploration vs Exploration values
-     'discount',  # How impactful future rewards are
-     'resize',  # The final size of the screen to enter into the neural network
-     'crop_values',  # Crop values to shrink down the size of the screen
-     'screen_process_type',  # How the environment processes the screen
-     'prev_states_queue_size', # How many states to store in the queue for returning the analysed state
-     'policy',
-     'policy_parameters'
-     )
-)
-
-# Holds all the optimal parameters for all the avaliable Atari games
-optimal_game_parameters = {}
-
-# Optimal Pong parameters
-optimal_game_parameters["Pong-v0"] = OptimalParameters(
-    0.03,
-    [1, 0.05, 0.005],
-    0.999,
-    [80, 50],
-    [[0.06, 0.94],[0.17, 0.92]],
-    "append",
-    4,
-    'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]} #Old: neurons_per_layer = [32, 64, 64]
-)
-
-# Optimal Breakout parameters
-optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.001,
-    [1, 0.1, 0.0005],
-    0.999,
-    [72, 40],
-    [[0.05, 0.95], [0.25, 0.95]],
-    "append",
-    4,
-    'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
-)
-
-"""
-# Optimal Breakout parameters
-optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.001,
-    [1, 0.1, 0.0025],
-    0.999,
-    [80, 50],
-    [[0.05, 0.95], [0.15, 0.95]],
-    "append",
-    4,
-    'DQN_CNN'
-)
-
-"""
-
-
-# Optimal Breakout parameters
-optimal_game_parameters["CartPole-v0"] = OptimalParameters(
-    0.001,
-    [1, 0.01, 0.01],
-    0.999,
-    [40, 90],
-    [[0, 1], [0.4, 0.8]],
-    "difference",
-    2,
-    'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
-)
-
 
 # Rendering information
 game_FPS = 30
@@ -152,107 +77,8 @@ use_menu = False
 # Shows the processed images every 100 steps
 show_processed_screens = False
 
-# Writes out the essential information of the training episodes to an excel file for each game
-def write_final_results(info_per_episode):
-
-    # Dataframe of the results of each episode
-    results_data_frame = pd.DataFrame(info_per_episode)
-    results_data_frame.name = "AI results"
-
-    # Converts parameter data into a dataframe
-    parameter_data_dict = optimal_game_parameters[default_atari_game]._asdict()
-    for key in parameter_data_dict.keys():
-        parameter_data_dict[key] = str(parameter_data_dict[key])
-
-    parameter_data_dict["num_training_episodes"] = str(num_training_episodes)
-
-    parameter_data_frame = pd.DataFrame(parameter_data_dict, index=[0])
-    parameter_data_frame.name = "Parameter information"
-
-    # Sets Excel file as the atari game
-    file_name = default_atari_game + "_results.xlsx"
-
-    # If the file does not exist currently, then it is created
-    if not os.path.exists(file_name):
-        workbook = xlsxwriter.Workbook(file_name)
-        workbook.close()
-
-    # File is opened and dataframes are added to a new sheet
-    workbook = load_workbook(file_name)
-    with pd.ExcelWriter(file_name, engine='openpyxl') as writer:
-        writer.book = workbook
-        parameter_data_frame.to_excel(writer, sheet_name='Results_', startrow=1, startcol=0)
-        results_data_frame.to_excel(writer, sheet_name='Results_', startrow=parameter_data_frame.shape[0] + 5, startcol=0)
-        writer.save()
-
-
-# Plots the current episode statistics
-def plot(info_per_episode, final):
-
-    # Declares the number of steps, total reward and total time for each episode
-    steps_per_episode = [episode["num_steps"] for episode in info_per_episode]
-    rewards_per_episode = [episode["total_reward"] for episode in info_per_episode]
-    total_time = [float(episode["total_time"]) for episode in info_per_episode]
-    moving_average = [episode["moving_average"] for episode in info_per_episode]
-
-    # Sets up main graph
-    plt.figure(3)
-    plt.clf()
-    plt.title("Reward, steps and total time for each training episode")
-    plt.xlabel("Episode number")
-    plt.ylabel("Total per element")
-    #plt.legend(["Steps", "Reward", "Time (ms)", "Moving average (reward)"])
-
-    plt.locator_params(axis='y', nbins=5)
-    plt.locator_params(axis='x', nbins=5)
-    point_intervals = round(len(info_per_episode)/10)
-    if point_intervals < 1:
-        point_intervals = 1
-    plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
-
-    # Plots point
-    plt.plot(steps_per_episode, '-bx', label="Steps")
-    plt.plot(rewards_per_episode, '-rx',  label="Rewards")
-    plt.plot(total_time, '-gx',  label="Time")
-
-    # Plots moving averages
-    plt.plot(moving_average, '-kx', label=f"Moving average (reward)")
-    plt.pause(0.001)
-
-    # Saves the final main plot
-    if final:
-        plt.savefig("Final Analysis")
-
-    # Shows and closes the plot- in an IDE this will save in local memory for viewing
-    plt.show()
-    plt.close()
-
-    # Sets up Rewards graph graph
-    plt.figure(4)
-    plt.clf()
-    plt.title("Reward for each training episode")
-    plt.xlabel("Episode number")
-    plt.ylabel("Reward value")
-
-    plt.locator_params(axis='y', nbins=5)
-    plt.locator_params(axis='x', nbins=5)
-    point_intervals = round(len(info_per_episode) / 10)
-    if point_intervals < 1:
-        point_intervals = 1
-    plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
-
-    plt.plot(rewards_per_episode, '-rx', label="Rewards")
-
-    # Plots moving averages
-    plt.plot(moving_average, '-kx', label=f"Moving average")
-    plt.pause(0.001)
-
-    # Saves the final reward plot
-    if final:
-        plt.savefig("Final Agent Rewards")
-
-    plt.show()
-    plt.close()
+# Creates a diagram of the current neural network
+show_neural_net = True
 
 
 # Extracts tensors from experiences
@@ -271,7 +97,7 @@ def extract_tensors(experiences):
     t4 = torch.cat(batch.next_state)
 
     # Returns an tuple of the experiences
-    return (t1,t2,t3,t4)
+    return (t1, t2, t3, t4)
 
 
 # Trains the agent using deep Q learning
@@ -284,6 +110,11 @@ def train_Q_agent(em, agent):
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
     screen_height = em.get_screen_height()
+
+    if colour_type == "RGB":
+        input_channels = 3
+    else:
+        input_channels = 1
 
     # Uses a deep neural network (without convolution layers)
     if optimal_game_parameters[default_atari_game].policy == "DQN":
@@ -298,13 +129,13 @@ def train_Q_agent(em, agent):
     # Uses a deep neural network (with convolution layers)
     elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN":
         # Establishes Policy and Target networks
-        policy_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(),
+        policy_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(), input_channels,
                              optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        target_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(),
+        target_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(), input_channels,
                              optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
     else:
@@ -367,8 +198,13 @@ def train_Q_agent(em, agent):
             if step % 100 == 0 and show_processed_screens:
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
+                if optimal_game_parameters[default_atari_game].colour_type == "RGB":
+                    state_screen_cmap = "hsv"
+                else:
+                    state_screen_cmap = "gray"
+
                 plt.figure(1)
-                plt.imshow(next_state_screen, interpolation='none')
+                plt.imshow(next_state_screen, interpolation='none', cmap=state_screen_cmap)
                 plt.title(f'Computer edited screen: {step}')
                 plt.show()
                 plt.close()
@@ -468,7 +304,7 @@ def train_Q_agent(em, agent):
     plot(episode_durations, True)
 
     # Writes data to excel file
-    write_final_results(episode_durations)
+    write_final_results(episode_durations, default_atari_game, num_training_episodes)
 
     # Closes environment
     em.close()
@@ -572,6 +408,7 @@ def print_agent_information():
     print(f"\t-Crop width percentage: {current_game_parameters.crop_values[0]}")
     print(f"\t-Crop height percentage: {current_game_parameters.crop_values[1]}")
     print(f"Screen resize: {current_game_parameters.resize}")
+    print(f"Screen colour type: {current_game_parameters.colour_type}")
     print()
 
     # State processing types are displayed
@@ -640,6 +477,9 @@ if __name__ == '__main__':
         play_type = 0
         train = True
 
+    # Checks to see if the parameters used are in a valid format
+    validate_game_parameters(optimal_game_parameters[default_atari_game])
+
     try:
         # The percentages to crop the screen for returning a state
         crop_width = optimal_game_parameters[default_atari_game].crop_values[0]
@@ -647,13 +487,12 @@ if __name__ == '__main__':
 
         # Resizes the image for output
         resize = optimal_game_parameters[default_atari_game].resize
-
         screen_process_type = optimal_game_parameters[default_atari_game].screen_process_type
-
         prev_states_queue_size = optimal_game_parameters[default_atari_game].prev_states_queue_size
+        colour_type = optimal_game_parameters[default_atari_game].colour_type
 
         # Environment is set to the passed atari game
-        em = EnvironmentManager(default_atari_game, [crop_width, crop_height], resize, screen_process_type, prev_states_queue_size)
+        em = EnvironmentManager(default_atari_game, [crop_width, crop_height], resize, screen_process_type, prev_states_queue_size, colour_type)
 
         # Action strategy is set
         episilon_values = optimal_game_parameters[default_atari_game].epsilon_values
