@@ -53,7 +53,8 @@ OptimalParameters = namedtuple(
      'crop_values',  # Crop values to shrink down the size of the screen
      'screen_process_type',  # How the environment processes the screen
      'prev_states_queue_size', # How many states to store in the queue for returning the analysed state
-     'policy'
+     'policy',
+     'policy_parameters'
      )
 )
 
@@ -67,9 +68,10 @@ optimal_game_parameters["Pong-v0"] = OptimalParameters(
     0.999,
     [80, 50],
     [[0.06, 0.94],[0.17, 0.92]],
-    "difference",
+    "append",
     4,
-    'DQN'
+    'DQN_CNN',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]} #Old: neurons_per_layer = [32, 64, 64]
 )
 
 # Optimal Breakout parameters
@@ -81,7 +83,8 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     [[0.05, 0.95], [0.25, 0.95]],
     "append",
     4,
-    'DQN_CNN'
+    'DQN_CNN',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
 )
 
 """
@@ -109,7 +112,8 @@ optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     [[0, 1], [0.4, 0.8]],
     "difference",
     2,
-    'DQN_CNN'
+    'DQN_CNN',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
 )
 
 
@@ -136,7 +140,7 @@ num_training_episodes = 3000
 # Updates the plot after so many episodes
 plot_update_episode_factor = 20
 
-# How many times to save the current agent progress (saves neural network)
+# How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
 
 # Render's the agent performing the eps
@@ -148,9 +152,8 @@ use_menu = False
 # Shows the processed images every 100 steps
 show_processed_screens = False
 
-
 # Writes out the essential information of the training episodes to an excel file for each game
-def write_results(info_per_episode):
+def write_final_results(info_per_episode):
 
     # Dataframe of the results of each episode
     results_data_frame = pd.DataFrame(info_per_episode)
@@ -192,13 +195,14 @@ def plot(info_per_episode, final):
     total_time = [float(episode["total_time"]) for episode in info_per_episode]
     moving_average = [episode["moving_average"] for episode in info_per_episode]
 
-    # Sets up graph
-    plt.figure(2)
+    # Sets up main graph
+    plt.figure(3)
     plt.clf()
     plt.title("Reward, steps and total time for each training episode")
     plt.xlabel("Episode number")
     plt.ylabel("Total per element")
     #plt.legend(["Steps", "Reward", "Time (ms)", "Moving average (reward)"])
+
     plt.locator_params(axis='y', nbins=5)
     plt.locator_params(axis='x', nbins=5)
     point_intervals = round(len(info_per_episode)/10)
@@ -215,9 +219,40 @@ def plot(info_per_episode, final):
     plt.plot(moving_average, '-kx', label=f"Moving average (reward)")
     plt.pause(0.001)
 
-    # Saves the final plot
+    # Saves the final main plot
     if final:
         plt.savefig("Final Analysis")
+
+    # Shows and closes the plot- in an IDE this will save in local memory for viewing
+    plt.show()
+    plt.close()
+
+    # Sets up Rewards graph graph
+    plt.figure(4)
+    plt.clf()
+    plt.title("Reward for each training episode")
+    plt.xlabel("Episode number")
+    plt.ylabel("Reward value")
+
+    plt.locator_params(axis='y', nbins=5)
+    plt.locator_params(axis='x', nbins=5)
+    point_intervals = round(len(info_per_episode) / 10)
+    if point_intervals < 1:
+        point_intervals = 1
+    plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
+
+    plt.plot(rewards_per_episode, '-rx', label="Rewards")
+
+    # Plots moving averages
+    plt.plot(moving_average, '-kx', label=f"Moving average")
+    plt.pause(0.001)
+
+    # Saves the final reward plot
+    if final:
+        plt.savefig("Final Agent Rewards")
+
+    plt.show()
+    plt.close()
 
 
 # Extracts tensors from experiences
@@ -263,12 +298,14 @@ def train_Q_agent(em, agent):
     # Uses a deep neural network (with convolution layers)
     elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN":
         # Establishes Policy and Target networks
-        policy_net = DQN_CNN(screen_height, screen_width, em.num_actions_available()).to(device)
+        policy_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(),
+                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        target_net = DQN_CNN(screen_height, screen_width, em.num_actions_available()).to(device)
+        target_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(),
+                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
     else:
         raise Exception("Policy and target networks not established")
@@ -326,19 +363,21 @@ def train_Q_agent(em, agent):
             # Updates new state
             state = next_state
 
-            # If set, shows how the states are visualised
+            # If set, shows how the states are visualised (used for debugging)
             if step % 100 == 0 and show_processed_screens:
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
-                plt.figure()
+                plt.figure(1)
                 plt.imshow(next_state_screen, interpolation='none')
                 plt.title(f'Computer edited screen: {step}')
                 plt.show()
+                plt.close()
 
-                plt.figure()
+                plt.figure(2)
                 plt.imshow(em.render('rgb_array'))
                 plt.title(f'Normal standard screen: {step}')
                 plt.show()
+                plt.close()
 
             # If set, renders the environment on the screen
             if render_agent or episode > 800:
@@ -421,6 +460,7 @@ def train_Q_agent(em, agent):
         if episode % target_update == 0:
             target_net.load_state_dict(policy_net.state_dict())
 
+        # Saves the current neural network weights depending on the save factor
         if episode % save_target_network_factor == 0:
             torch.save(target_net.state_dict(), f"network_weights/{default_atari_game}_Policy_Network_{episode}")
 
@@ -428,7 +468,7 @@ def train_Q_agent(em, agent):
     plot(episode_durations, True)
 
     # Writes data to excel file
-    write_results(episode_durations)
+    write_final_results(episode_durations)
 
     # Closes environment
     em.close()
@@ -538,6 +578,13 @@ def print_agent_information():
     print("State processing types:")
     print(f"Number of state queue: {current_game_parameters.prev_states_queue_size}")
     print(f"States analysis type: '{current_game_parameters.screen_process_type}'")
+    print()
+
+    # The properties of the policy
+    print("Neural network parameters:")
+    print(f"\t-Network type: {current_game_parameters.policy}")
+    for current_property, value in current_game_parameters.policy_parameters.items():
+        print(f"\t-{current_property.capitalize()}: {value}")
     print()
 
     # CUDA Information is displayed

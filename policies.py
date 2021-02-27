@@ -43,16 +43,15 @@ class DQN(nn.Module):
 
 # A deep neural network with convoluted layers to process the image
 class DQN_CNN(nn.Module):
-    def __init__(self, h, w, outputs):
+    def __init__(self, h, w, outputs,  nn_structure: dict):
         super(DQN_CNN, self).__init__()
 
         # Properties for how the convoluted neural network
-        kernel_sizes = [8, 4, 3]
-        strides = [4, 2, 1]
-        #neurons_per_layer = [32, 64, 64]
+        kernel_sizes = nn_structure["kernel_sizes"]
+        strides = nn_structure["strides"]
+        neurons_per_layer = nn_structure["neurons_per_layer"]
 
-        neurons_per_layer = [24, 32, 48]
-
+        # CNN layers
         self.conv1 = nn.Conv2d(3, neurons_per_layer[0], kernel_size=kernel_sizes[0], stride=strides[0])
         self.bn1 = nn.BatchNorm2d(neurons_per_layer[0])
         self.conv2 = nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1], kernel_size=kernel_sizes[1], stride=strides[1])
