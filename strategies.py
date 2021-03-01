@@ -13,3 +13,6 @@ class EpsilonGreedyStrategy():
         # Hence, the exploration rate decreases linearly with time
         rate = self.start - (self.decay * episode)
         return rate if rate > self.end else self.end
+
+    def get_step_dependant_exploration_rate(self, episode, episode_step):
+        pass

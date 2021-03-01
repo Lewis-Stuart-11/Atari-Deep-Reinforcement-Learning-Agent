@@ -52,11 +52,16 @@ class DQN_CNN(nn.Module):
         neurons_per_layer = nn_structure["neurons_per_layer"]
 
         # CNN layers
-        self.conv1 = nn.Conv2d(input_channels, neurons_per_layer[0], kernel_size=kernel_sizes[0], stride=strides[0])
+        self.conv1 = nn.Conv2d(input_channels, neurons_per_layer[0],
+                               kernel_size=kernel_sizes[0], stride=strides[0])
         self.bn1 = nn.BatchNorm2d(neurons_per_layer[0])
-        self.conv2 = nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1], kernel_size=kernel_sizes[1], stride=strides[1])
+
+        self.conv2 = nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1],
+                               kernel_size=kernel_sizes[1], stride=strides[1])
         self.bn2 = nn.BatchNorm2d(neurons_per_layer[1])
-        self.conv3 = nn.Conv2d(neurons_per_layer[1], neurons_per_layer[2], kernel_size=kernel_sizes[2], stride=strides[2])
+
+        self.conv3 = nn.Conv2d(neurons_per_layer[1], neurons_per_layer[2],
+                               kernel_size=kernel_sizes[2], stride=strides[2])
         self.bn3 = nn.BatchNorm2d(neurons_per_layer[2])
 
         # Calculates the size of the neural network head

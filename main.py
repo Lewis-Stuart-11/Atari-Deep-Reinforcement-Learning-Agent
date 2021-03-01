@@ -46,9 +46,6 @@ default_atari_game = "BreakoutDeterministic-v4"
 game_FPS = 30
 actions_per_second = 15
 
-# Number of states in a batch
-batch_size = 256
-
 # Discount value
 discount_value = 0.999
 
@@ -149,6 +146,9 @@ def train_Q_agent(em, agent):
 
     # Sets and optimiser with the values to optimised as the parameters of the policy network, with the learning rate
     optimizer = optim.Adam(params=policy_net.parameters(), lr=optimal_game_parameters[default_atari_game].learning_rate)
+
+    # Number of states in a batch
+    batch_size = optimal_game_parameters[default_atari_game].batch_size
 
     # Stores episode durations
     episode_durations = []

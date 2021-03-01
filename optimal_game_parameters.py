@@ -15,7 +15,8 @@ OptimalParameters = namedtuple(
      'colour_type', # Depicts how the screen should be processed with colour
      'prev_states_queue_size', # How many states to store in the queue for returning the analysed state
      'policy', # Chooses which policy to use (eg. DQN)
-     'policy_parameters' # The specific parameters for the selected policy (eg. Number of neurons)
+     'policy_parameters', # The specific parameters for the selected policy (eg. Number of neurons)
+     'batch_size' # The number of batches to analyse per step
      )
 )
 
@@ -109,12 +110,13 @@ optimal_game_parameters["Pong-v0"] = OptimalParameters(
     "RGB",
     4,
     'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
+    250
 )
 
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.001,
+    0.0005,
     [1, 0.1, 0.0005],
     0.999,
     [68, 40],
@@ -123,7 +125,8 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     "Gray",
     4,
     'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64]}
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
+    50
 )
 
 """
@@ -153,5 +156,6 @@ optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     "RGB",
     2,
     'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]}
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
+    250
 )
