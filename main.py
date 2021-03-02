@@ -49,21 +49,17 @@ actions_per_second = 15
 # Discount value
 discount_value = 0.999
 
-# When the weights of the target neural network should be updated with the policy networks weights
-# after a set number of episodes
-target_update = 10
-
-# The capacity of the replay memory
-memory_size = 100000
-
 # Episodes to train
-num_training_episodes = 3000
+num_training_episodes = 5000
 
 # Updates the plot after so many episodes
 plot_update_episode_factor = 20
 
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
+
+# The number of episodes before rendering the AI
+render_episode_factor = 800
 
 # Render's the agent performing the eps
 render_agent = False
@@ -102,7 +98,7 @@ def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Establishes the replay memory
-    memory = ReplayMemory(memory_size)
+    memory = ReplayMemory(optimal_game_parameters[default_atari_game].memory_size)
 
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
@@ -293,7 +289,7 @@ def train_Q_agent(em, agent):
 
         # Checks to see if the target network needs updating by checking if the episode count is
         # a multiple of the target_update value
-        if episode % target_update == 0:
+        if episode % optimal_game_parameters[default_atari_game].target_update == 0:
             target_net.load_state_dict(policy_net.state_dict())
 
         # Saves the current neural network weights depending on the save factor
@@ -318,6 +314,8 @@ def self_play(policy_net, em, agent):
     current_frame = 1
 
     em.reset()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Return initial state
     state = em.get_state()
@@ -422,6 +420,11 @@ def print_agent_information():
     print(f"\t-Network type: {current_game_parameters.policy}")
     for current_property, value in current_game_parameters.policy_parameters.items():
         print(f"\t-{current_property.capitalize()}: {value}")
+    print()
+
+    print("Replay parameters:")
+    print(f"Number of experiences saved replay memory: {current_game_parameters.memory_size}")
+    print(f"Episodes to update target network (with policy network): {current_game_parameters.target_update}")
     print()
 
     # CUDA Information is displayed
