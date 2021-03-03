@@ -31,7 +31,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Valid values to set colour, policy and processing values
     valid_colour_types = ["RGB", "Gray", "Binary"]
     available_policies = {"DQN_CNN": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3}, "DQN": {"neurons_per_layer": 3}}
-    available_screen_processing_types = ["append", "difference", "standard"]
+    available_screen_processing_types = ["append", "difference", "standard", "morph"]
 
     # Learning rate must be between 1-0
     if not(1 >= game_parameters.learning_rate > 0):
@@ -143,14 +143,14 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.999,
     [68, 40],
     [[0.05, 0.95], [0.25, 0.95]],
-    "append",
+    "standard",
     "Gray",
     4,
     'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [48, 32, 28]},
     200,
-    10000,
-    2
+    100000,
+    5
 )
 
 """

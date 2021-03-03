@@ -45,6 +45,10 @@ class EnvironmentManager():
     def render(self, mode='human'):
         return self.env.render(mode)
 
+    # Finishes episode prematurely
+    def set_episode_end(self):
+        self.done = True
+
     # Returns the number of actions available
     def num_actions_available(self):
         return self.env.action_space.n
@@ -82,7 +86,8 @@ class EnvironmentManager():
         state, reward, self.done, info = self.env.step(action.item())
 
         # Increases number of states that have been traversed in this episode
-        self.update_state_queue()
+        if self.screen_process_type != "standard":
+            self.update_state_queue()
 
         # Returns the reward as a tensor
         return torch.tensor([reward], device=self.device)
@@ -93,12 +98,16 @@ class EnvironmentManager():
             return self.get_difference_state()
         elif self.screen_process_type == "append":
             return self.get_appended_state()
-        else:
+        elif self.screen_process_type == "morph":
+            return self.get_morphed_state()
+        elif self.screen_process_type == "standard":
             return self.get_standard_state()
+        else:
+            raise ValueError(f"Process type: '{self.screen_process_type}' not found")
 
     # Returns standard screen, which is the RGB screen pixel data extracted straight from the gym environment
     def get_standard_state(self):
-        return self.state_queue[self.current_state_num % self.num_states]
+        return self.get_processed_screen()
 
     # Returns the difference between the first screen in the queue, and the last screen in the queue
     # This highlights the changes that have been made between these two states. This is advantageous
@@ -134,6 +143,21 @@ class EnvironmentManager():
             self.state_queue = []
 
         return combined_states
+
+    def get_morphed_state(self):
+        # Check to see if the screen is just starting or just ended, if so the queue is reset to the first state
+        if len(self.state_queue) == 0:
+            self.reset_queue("normal")
+
+        # Combines all states by adding all values together
+        morphed_states = self.state_queue[0]
+        for i in range(1, self.num_states):
+            morphed_states = torch.add(morphed_states,  self.state_queue[i])
+
+        # Takes the average of all taken states
+        morphed_states /= self.num_states
+
+        return morphed_states
 
     # Return the screen height of the processed state
     def get_screen_height(self):
@@ -193,10 +217,22 @@ class EnvironmentManager():
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
                 , T.Resize((self.resize[0], self.resize[1])) # Resized to the size specified by the resize property
-                , T.Grayscale(num_output_channels=1)
+                , T.Grayscale(num_output_channels=1) # Sets the image to grayscale
                 , T.ToTensor() # Transformed to a tensor
             ])
 
-        # Returned and an extra dimension is added as these will represent a batch of states
-        return resize(screen).unsqueeze(0).to(self.device)
+        # Returns a tensor from the image composition
+        resized_tensor = resize(screen).to(self.device)
+
+        # Converts all colour values to either 0 or 1 (very costly as had to make custom operation to perform this)
+        cut_off = 0.1
+        if self.colour_type == "Binary":
+            for width in range(self.resize[0]):
+                for length in range(self.resize[1]):
+                    resized_tensor[0, width, length] = 0 if resized_tensor[0, width, length] < cut_off else 1
+
+        # An extra dimension is added as these will represent a batch of states
+        batch_tensor = resized_tensor.unsqueeze(0).to(self.device)
+
+        return batch_tensor
 

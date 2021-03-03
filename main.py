@@ -156,6 +156,8 @@ def train_Q_agent(em, agent):
         make_dot(returned_values, params=dict(list(policy_net.named_parameters()))).render("Policy Network diagram",
                                                                                            format="png")
 
+
+
     # Iterates over each episode
     for episode in range(num_training_episodes):
 
@@ -191,7 +193,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if step % 100 == 0 and show_processed_screens:
+            if step < 20 and show_processed_screens:
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
                 if optimal_game_parameters[default_atari_game].colour_type == "RGB":
