@@ -181,6 +181,11 @@ def train_Q_agent(em, agent):
             # Returns reward
             reward = em.take_action(action)
 
+            if em.done:
+                reward += optimal_game_parameters[default_atari_game].ending_reward
+            else:
+                reward += optimal_game_parameters[default_atari_game].step_reward
+
             episode_reward += reward.numpy()[0]
 
             # Returns next state
@@ -274,7 +279,7 @@ def train_Q_agent(em, agent):
                 # Prints the current episode information if set
                 if use_menu == False:
                     print(f"Current episode: {episode}")
-                    print(f"Reward: {episode_reward}")
+                    print(f"Reward: {round(episode_reward,2)}")
                     print(f"Steps: {step}")
                     print(f"Moving_average: {prev_rewards}")
                     print(f"Current epsilon: {agent.return_exploration_rate(episode)}")
@@ -395,6 +400,12 @@ def print_agent_information():
     print(f"Discount factor: {current_game_parameters.discount}")
     print(f"Learning rate: {current_game_parameters.learning_rate}")
     print(f"Policy used: {current_game_parameters.policy}")
+
+    # Custom reward values
+    print("Custom rewards:")
+    print(f"Step reward: {current_game_parameters.step_reward}")
+    print(f"Ending reward: {current_game_parameters.ending_reward}")
+    print()
 
     # Parameters for how choices are made
     print("Epsilon values: ")

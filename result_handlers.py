@@ -48,7 +48,7 @@ def plot(info_per_episode, final):
 
     # Declares the number of steps, total reward and total time for each episode
     steps_per_episode = [episode["num_steps"] for episode in info_per_episode]
-    rewards_per_episode = [episode["total_reward"] for episode in info_per_episode]
+    rewards_per_episode = [round(episode["total_reward"], 2) for episode in info_per_episode]
     total_time = [float(episode["total_time"]) for episode in info_per_episode]
     moving_average = [episode["moving_average"] for episode in info_per_episode]
 

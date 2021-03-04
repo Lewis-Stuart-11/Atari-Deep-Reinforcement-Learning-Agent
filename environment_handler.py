@@ -205,7 +205,7 @@ class EnvironmentManager():
         # Converts screen to a tensor
         screen = torch.from_numpy(screen)
 
-        if self.colour_type == "RGB":
+        if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
                 , T.Resize((self.resize[0], self.resize[1]))  # Resized to the size specified by the resize property
@@ -226,7 +226,7 @@ class EnvironmentManager():
 
         # Converts all colour values to either 0 or 1 (very costly as had to make custom operation to perform this)
         cut_off = 0.1
-        if self.colour_type == "Binary":
+        if self.colour_type == "binary":
             for width in range(self.resize[0]):
                 for length in range(self.resize[1]):
                     resized_tensor[0, width, length] = 0 if resized_tensor[0, width, length] < cut_off else 1
