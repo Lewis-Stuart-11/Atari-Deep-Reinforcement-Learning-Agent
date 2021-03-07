@@ -108,6 +108,7 @@ class QValues():
     @staticmethod
     # Accepts the target network and next states
     def get_next(target_net, next_states):
+
         # Finds the locations of all the final states (these are the states that occur after the
         # the state is occured that ended the episode)
         # In this context, a final state is a state that represents an all black screen

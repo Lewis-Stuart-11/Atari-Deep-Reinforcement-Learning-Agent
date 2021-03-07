@@ -146,6 +146,9 @@ def train_Q_agent(em, agent):
     # Number of states in a batch
     batch_size = optimal_game_parameters[default_atari_game].batch_size
 
+    # How often to improve the neural network weights (how many steps per episode to update)
+    improve_step_factor = optimal_game_parameters[default_atari_game].update_factor
+
     # Stores episode durations
     episode_durations = []
 
@@ -155,8 +158,6 @@ def train_Q_agent(em, agent):
         returned_values = policy_net(em.get_state())
         make_dot(returned_values, params=dict(list(policy_net.named_parameters()))).render("Policy Network diagram",
                                                                                            format="png")
-
-
 
     # Iterates over each episode
     for episode in range(num_training_episodes):
@@ -168,6 +169,7 @@ def train_Q_agent(em, agent):
 
         # Total episode Reward
         episode_reward = 0
+        environment_total_reward = 0
 
         # Start time of the episode
         start = time.time()
@@ -180,6 +182,9 @@ def train_Q_agent(em, agent):
 
             # Returns reward
             reward = em.take_action(action)
+
+            if optimal_game_parameters[default_atari_game].step_reward != 0:
+                environment_total_reward += reward.numpy()[0]
 
             if em.done:
                 reward += optimal_game_parameters[default_atari_game].ending_reward
@@ -223,7 +228,7 @@ def train_Q_agent(em, agent):
                 em.render()
 
             # Retrieves a sample if possible and assigns this to the variable 'Experiences'
-            if memory.can_provide_sample(batch_size):
+            if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
                 experiences = memory.sample(batch_size)
 
                 # Extracts all states, actions, reward and next states into their own tensors
@@ -273,6 +278,9 @@ def train_Q_agent(em, agent):
                                 "total_time": total_time[0:total_time.find('.') + 3],
                                 "moving_average": prev_rewards}
 
+                if optimal_game_parameters[default_atari_game].step_reward != 0:
+                    episode_info["environment_total_reward"] = environment_total_reward
+
                 # Appends the episode information
                 episode_durations.append(episode_info)
 
@@ -280,6 +288,8 @@ def train_Q_agent(em, agent):
                 if use_menu == False:
                     print(f"Current episode: {episode}")
                     print(f"Reward: {round(episode_reward,2)}")
+                    if optimal_game_parameters[default_atari_game].step_reward != 0:
+                        print(f"Environment reward: {round(environment_total_reward,2)}")
                     print(f"Steps: {step}")
                     print(f"Moving_average: {prev_rewards}")
                     print(f"Current epsilon: {agent.return_exploration_rate(episode)}")
@@ -400,6 +410,7 @@ def print_agent_information():
     print(f"Discount factor: {current_game_parameters.discount}")
     print(f"Learning rate: {current_game_parameters.learning_rate}")
     print(f"Policy used: {current_game_parameters.policy}")
+    print()
 
     # Custom reward values
     print("Custom rewards:")
@@ -438,6 +449,7 @@ def print_agent_information():
     print("Replay parameters:")
     print(f"Number of experiences saved replay memory: {current_game_parameters.memory_size}")
     print(f"Episodes to update target network (with policy network): {current_game_parameters.target_update}")
+    print(f"Steps per neural network update: {current_game_parameters.update_factor}")
     print()
 
     # CUDA Information is displayed

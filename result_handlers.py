@@ -84,7 +84,7 @@ def plot(info_per_episode, final):
     plt.show()
     plt.close()
 
-    # Sets up Rewards graph graph
+    # Sets up Rewards graph
     plt.figure(4)
     plt.clf()
     plt.title("Reward for each training episode")
@@ -99,6 +99,10 @@ def plot(info_per_episode, final):
     plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
 
     plt.plot(rewards_per_episode, '-rx', label="Rewards")
+
+    if "environment_total_reward" in info_per_episode[0].keys():
+        environment_reward = [episode["environment_total_reward"] for episode in info_per_episode]
+        plt.plot(environment_reward, '-bx', label="Rewards")
 
     # Plots moving averages
     plt.plot(moving_average, '-kx', label=f"Moving average")

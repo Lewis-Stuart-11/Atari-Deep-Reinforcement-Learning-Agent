@@ -19,6 +19,7 @@ OptimalParameters = namedtuple(
      'batch_size', # The number of batches to analyse per step
      'memory_size', # How many experiences to save to memory
      'target_update', # How many episodes before the target neural network should be updated with the policy networks weights
+     'update_factor', # How many steps per episode before performing a batch weight update
      'step_reward', # The reward for the agent still being in play
      'ending_reward' # The reward for if the episode finishes
      )
@@ -145,6 +146,7 @@ optimal_game_parameters["Pong-v0"] = OptimalParameters(
     250,
     100000,
     10,
+    10,
     0,
     0
 )
@@ -156,16 +158,17 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.999,
     [68, 40],
     [[0.05, 0.95], [0.25, 0.95]],
-    "standard",
+    "append",
     "gray",
     4,
     'DQN_CNN',
     {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [48, 32, 28]},
     200,
-    100000,
+    10000,
     5,
+    10,
     0.01,
-    -1
+    0
 )
 
 """
@@ -198,6 +201,7 @@ optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
     250,
     100000,
+    10,
     10,
     0,
     0
