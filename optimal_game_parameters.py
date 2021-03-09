@@ -162,11 +162,11 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     "gray",
     4,
     'DQN_CNN',
-    {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [48, 32, 28]},
+    {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
     200,
-    10000,
-    5,
-    10,
+    30000,
+    2,
+    50,
     0.01,
     0
 )

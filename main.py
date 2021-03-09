@@ -36,10 +36,7 @@ os.environ["PATH"] += os.pathsep + "C:\\Program Files\\Graphviz\\bin"
 random.seed(0)
 np.random.seed(0)
 
-# Lists all atari games the agent can interact with
-atari_games = ["SpaceInvaders-v0", "CartPole-v0", "Pong-v0", "BreakoutDeterministic-v4"]
-
-# Default game
+# Default game to play
 default_atari_game = "BreakoutDeterministic-v4"
 
 # Rendering information
@@ -50,10 +47,10 @@ actions_per_second = 15
 discount_value = 0.999
 
 # Episodes to train
-num_training_episodes = 5000
+num_training_episodes = 15000
 
 # Updates the plot after so many episodes
-plot_update_episode_factor = 20
+plot_update_episode_factor = 100
 
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
@@ -72,6 +69,15 @@ show_processed_screens = False
 
 # Creates a diagram of the current neural network
 show_neural_net = True
+
+
+# Creates a graph of a state screen
+def display_processed_screens(next_state_screen, state_screen_cmap, step):
+    plt.figure(1)
+    plt.imshow(next_state_screen, interpolation='none', cmap=state_screen_cmap)
+    plt.title(f'Computer edited screen: {step}')
+    plt.show()
+    plt.close()
 
 
 # Extracts tensors from experiences
@@ -203,7 +209,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if step < 20 and show_processed_screens:
+            if step % 100 and show_processed_screens:
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
                 if optimal_game_parameters[default_atari_game].colour_type == "RGB":
@@ -211,17 +217,8 @@ def train_Q_agent(em, agent):
                 else:
                     state_screen_cmap = "gray"
 
-                plt.figure(1)
-                plt.imshow(next_state_screen, interpolation='none', cmap=state_screen_cmap)
-                plt.title(f'Computer edited screen: {step}')
-                plt.show()
-                plt.close()
-
-                plt.figure(2)
-                plt.imshow(em.render('rgb_array'))
-                plt.title(f'Normal standard screen: {step}')
-                plt.show()
-                plt.close()
+                display_processed_screens(next_state_screen, state_screen_cmap, step)
+                display_processed_screens(em.render('rgb_array'), state_screen_cmap, step)
 
             # If set, renders the environment on the screen
             if render_agent or episode > 800:
@@ -239,7 +236,8 @@ def train_Q_agent(em, agent):
 
                 # Extracts next Q values of the best corresponding actions of the target network
                 # The target network is used for finding the next best actions
-                next_q_values = QValues.get_next(target_net, next_states)
+                next_q_values = QValues.get_next(target_net, next_states,
+                                                 optimal_game_parameters[default_atari_game].ending_reward)
 
                 # Uses formula E[reward + gamma * maxarg(next state)] to update Q values
                 target_q_values = (next_q_values * optimal_game_parameters[default_atari_game].discount) + rewards
@@ -496,7 +494,7 @@ if __name__ == '__main__':
 
         if play_type not in [0, 1, 2] or type(play_type) != int:
             raise ValueError("Type of play must be an int between 0-2")
-        elif default_atari_game not in atari_games:
+        elif default_atari_game not in optimal_game_parameters.keys():
             raise ValueError(f"Passed Atari game '{default_atari_game}' could not be found")
 
     # Used if debugging and just training

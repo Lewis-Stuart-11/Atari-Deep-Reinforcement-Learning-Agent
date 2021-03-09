@@ -107,7 +107,7 @@ class QValues():
 
     @staticmethod
     # Accepts the target network and next states
-    def get_next(target_net, next_states):
+    def get_next(target_net, next_states, final_state_reward):
 
         # Finds the locations of all the final states (these are the states that occur after the
         # the state is occured that ended the episode)
@@ -118,7 +118,7 @@ class QValues():
         # it is a final state. These final states are represented as True in this case (as it is converted to a boolean)
         # so it is then known not to include them
         final_state_locations = next_states.flatten(start_dim=1) \
-            .max(dim=1)[0].eq(0).type(torch.bool)
+            .max(dim=1)[0].eq(final_state_reward).type(torch.bool)
 
         # All non-final state_locations are the opposites of the final state locations
         non_final_state_locations = (final_state_locations == False)
@@ -165,6 +165,7 @@ class ReplayMemory():
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
 
-    # Checks if a sample can be provided
+    # Checks if a sample can be provided, the amount of experiences in memory must be larger than the
+    # Batch size, and the memory must be at least 1/10 full of experiences
     def can_provide_sample(self, batch_size):
-        return len(self.memory) >= batch_size
+        return len(self.memory) >= batch_size and len(self.memory) >= self.capacity/10
