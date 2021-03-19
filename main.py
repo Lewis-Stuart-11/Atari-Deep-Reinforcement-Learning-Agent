@@ -37,17 +37,14 @@ random.seed(0)
 np.random.seed(0)
 
 # Default game to play
-default_atari_game = "BreakoutDeterministic-v4"
+default_atari_game = "MsPacman-v0"
 
 # Rendering information
 game_FPS = 30
 actions_per_second = 15
 
-# Discount value
-discount_value = 0.999
-
 # Episodes to train
-num_training_episodes = 15000
+num_training_episodes = 20000
 
 # Updates the plot after so many episodes
 plot_update_episode_factor = 100
@@ -55,11 +52,8 @@ plot_update_episode_factor = 100
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
 
-# The number of episodes before rendering the AI
-render_episode_factor = 800
-
-# Render's the agent performing the eps
-render_agent = False
+# Render's the agent performing the eps after a certain number of episodes
+render_agent = -1 #num_training_episodes//3
 
 # Will set whether to use the user menu
 use_menu = False
@@ -69,6 +63,9 @@ show_processed_screens = False
 
 # Creates a diagram of the current neural network
 show_neural_net = True
+
+# Pass a file name to load in weights and test agent
+test_agent = None #"Pong-v0_Policy_Network_2800"
 
 
 # Creates a graph of a state screen
@@ -96,7 +93,7 @@ def extract_tensors(experiences):
     t4 = torch.cat(batch.next_state)
 
     # Returns an tuple of the experiences
-    return (t1, t2, t3, t4)
+    return t1, t2, t3, t4
 
 
 # Trains the agent using deep Q learning
@@ -110,7 +107,9 @@ def train_Q_agent(em, agent):
     screen_width = em.get_screen_width()
     screen_height = em.get_screen_height()
 
-    if colour_type == "RGB":
+    colour_type = optimal_game_parameters[default_atari_game].colour_type
+
+    if colour_type == "rgb":
         input_channels = 3
     else:
         input_channels = 1
@@ -162,8 +161,8 @@ def train_Q_agent(em, agent):
     if show_neural_net:
         print("Creating neural network diagram")
         returned_values = policy_net(em.get_state())
-        make_dot(returned_values, params=dict(list(policy_net.named_parameters()))).render("Policy Network diagram",
-                                                                                           format="png")
+        make_dot(returned_values,
+                 params=dict(list(policy_net.named_parameters()))).render("Policy Network diagram", format="png")
 
     # Iterates over each episode
     for episode in range(num_training_episodes):
@@ -221,7 +220,7 @@ def train_Q_agent(em, agent):
                 display_processed_screens(em.render('rgb_array'), state_screen_cmap, step)
 
             # If set, renders the environment on the screen
-            if render_agent or episode > 800:
+            if render_agent and episode > render_agent:
                 em.render()
 
             # Retrieves a sample if possible and assigns this to the variable 'Experiences'
@@ -330,19 +329,20 @@ def self_play(policy_net, em, agent):
 
     em.reset()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # Return initial state
     state = em.get_state()
     while True:
         step_start_time = time.time()
 
-        action = agent.select_exploitative_action(state, policy_net) if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
+        action = agent.select_exploitative_action(state, policy_net) # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
 
-        em.take_action(action)
+        #print(f"taking action: {action}")
+
+        # Returns reward
+        reward = em.take_action(action)
 
         # Renders environment
-        em.render('human')
+        em.render()
 
         # Executes if the agent either wins or loses
         if em.done: break
@@ -391,7 +391,7 @@ def play_game(play_type, policy_net, em, agent):
 
 
 # Prints all information about the agent
-def print_agent_information():
+def print_agent_information(em):
     print()
     print(f"New game: {default_atari_game}")
 
@@ -460,8 +460,78 @@ def print_agent_information():
     print("Running Agent")
 
 
-if __name__ == '__main__':
-    arguements = sys.argv
+def test(policy_name: str):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    atari_game_index = policy_name.find("_")
+
+    if atari_game_index == -1:
+        return ValueError("Policy_name must be a valid file produced by the program")
+
+    atari_game = policy_name[0:atari_game_index]
+
+    test_em = return_env_with_atari_game(atari_game)
+
+    colour_type = optimal_game_parameters[atari_game].colour_type
+
+    if colour_type == "rgb":
+        input_channels = 3
+    else:
+        input_channels = 1
+
+    if optimal_game_parameters[default_atari_game].policy == "DQN":
+        # Sets up input sizes for the networks
+        test_net = DQN(test_em.get_screen_height(), test_em.get_screen_width(), test_em.num_actions_available()).to(device)
+
+        # Uses a deep neural network (with convolution layers)
+    elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN":
+        # Establishes Policy and Target networks
+        test_net = DQN_CNN(test_em.get_screen_height(),  test_em.get_screen_width(), test_em.num_actions_available(), input_channels,
+                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+
+
+    storage = torch.load(f"network_weights/{policy_name}")
+    if not storage:
+        raise FileNotFoundError(
+            f"Could not load in neural network for policy {policy_name}")
+    test_net.load_state_dict(storage)
+
+    episilon_values = optimal_game_parameters[default_atari_game].epsilon_values
+    test_strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
+
+    # Agent is created
+    test_agent = Agent(test_strategy, test_em.num_actions_available())
+
+    self_play(test_net, test_em, test_agent)
+
+
+def return_env_with_atari_game(atari_game):
+    try:
+        # The percentages to crop the screen for returning a state
+        crop_width = optimal_game_parameters[atari_game].crop_values[0]
+        crop_height = optimal_game_parameters[atari_game].crop_values[1]
+
+        # Resizes the image for output
+        resize = optimal_game_parameters[atari_game].resize
+        screen_process_type = optimal_game_parameters[atari_game].screen_process_type
+        prev_states_queue_size = optimal_game_parameters[atari_game].prev_states_queue_size
+        colour_type = optimal_game_parameters[atari_game].colour_type
+
+        # Environment is set to the passed atari game
+        em = EnvironmentManager(atari_game, [crop_width, crop_height], resize, screen_process_type,
+                                prev_states_queue_size, colour_type)
+
+    except BaseException:
+        raise Exception("Failed to load gym environment and agent")
+
+    return em
+
+
+def main(arguements, default_atari_game):
+
+    if test_agent is not None:
+        test(test_agent)
+        return True
 
     # If the user menu is set, passed parameters to the program are evaluated
     if use_menu:
@@ -507,18 +577,7 @@ if __name__ == '__main__':
     validate_game_parameters(optimal_game_parameters[default_atari_game])
 
     try:
-        # The percentages to crop the screen for returning a state
-        crop_width = optimal_game_parameters[default_atari_game].crop_values[0]
-        crop_height = optimal_game_parameters[default_atari_game].crop_values[1]
-
-        # Resizes the image for output
-        resize = optimal_game_parameters[default_atari_game].resize
-        screen_process_type = optimal_game_parameters[default_atari_game].screen_process_type
-        prev_states_queue_size = optimal_game_parameters[default_atari_game].prev_states_queue_size
-        colour_type = optimal_game_parameters[default_atari_game].colour_type
-
-        # Environment is set to the passed atari game
-        em = EnvironmentManager(default_atari_game, [crop_width, crop_height], resize, screen_process_type, prev_states_queue_size, colour_type)
+        em = return_env_with_atari_game(default_atari_game)
 
         # Action strategy is set
         episilon_values = optimal_game_parameters[default_atari_game].epsilon_values
@@ -532,7 +591,7 @@ if __name__ == '__main__':
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
 
-    print_agent_information()
+    print_agent_information(em)
 
     # Trains the agent if the user has selected to do so
     if train:
@@ -558,4 +617,16 @@ if __name__ == '__main__':
 
     # Agent plays the game according to the user play type input
     play_game(play_type, policy_net, em, agent)
+
+    em.close()
+
+    return True
+
+
+if __name__ == '__main__':
+    arguements = sys.argv
+    main(arguements, default_atari_game)
+    print("Thank you for using Ataria")
+    exit(0)
+
 
