@@ -153,6 +153,7 @@ class ReplayMemory():
         self.capacity = capacity
         self.memory = []
         self.push_count = 0
+        self.start_size = 2000
 
     # Pushes the new experience to the replay memory queue
     def push(self, experience):
@@ -169,4 +170,7 @@ class ReplayMemory():
     # Checks if a sample can be provided, the amount of experiences in memory must be larger than the
     # Batch size, and the memory must be at least 1/10 full of experiences
     def can_provide_sample(self, batch_size):
-        return len(self.memory) >= batch_size and len(self.memory) >= self.capacity/10
+        return len(self.memory) >= batch_size and len(self.memory) >= self.start_size
+
+    def current_memory_size(self):
+        return len(self.memory)

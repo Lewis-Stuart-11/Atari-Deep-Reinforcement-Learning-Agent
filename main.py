@@ -37,14 +37,14 @@ random.seed(0)
 np.random.seed(0)
 
 # Default game to play
-default_atari_game = "MsPacman-v0"
+default_atari_game = "BreakoutDeterministic-v4"
 
 # Rendering information
 game_FPS = 30
 actions_per_second = 15
 
 # Episodes to train
-num_training_episodes = 20000
+num_training_episodes = 12000
 
 # Updates the plot after so many episodes
 plot_update_episode_factor = 100
@@ -225,6 +225,7 @@ def train_Q_agent(em, agent):
 
             # Retrieves a sample if possible and assigns this to the variable 'Experiences'
             if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
+
                 experiences = memory.sample(batch_size)
 
                 # Extracts all states, actions, reward and next states into their own tensors
@@ -299,11 +300,11 @@ def train_Q_agent(em, agent):
                     plot(episode_durations, False)
 
                 # Displays the estimated time remaining based on the previous execution time
-                if episode + 1 % 10 == 0 and memory.can_provide_sample(batch_size):
+                if (episode + 1) % 10 == 0 and memory.can_provide_sample(batch_size):
                     prev_time = 0
                     prev_episodes = episode_durations[-10:]
                     for prev_episode in prev_episodes:
-                        prev_time += prev_episode["total_time"]
+                        prev_time += float(prev_episode["total_time"])
 
                     average_time = prev_time/10
                     episodes_left = num_training_episodes - episode
@@ -311,7 +312,8 @@ def train_Q_agent(em, agent):
                     estimated_time_remaining = average_time * episodes_left
 
                     print()
-                    print(f"Current estimated time left: {round(estimated_time_remaining/60)} minutes")
+                    print(f"Current estimated time left: {round(estimated_time_remaining/60)//60} hrs "
+                          f"{round(estimated_time_remaining/60) % 60} mins")
                     print()
 
                 # Episode is finished and breaks

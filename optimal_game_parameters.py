@@ -164,11 +164,11 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     'DQN_CNN',
     {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
     40,
-    10000,
-    2,
-    50,
+    500000,
+    10,
+    3,
     0,
-    -1
+    -0.01
 )
 
 # Optimal Pacman parameters
