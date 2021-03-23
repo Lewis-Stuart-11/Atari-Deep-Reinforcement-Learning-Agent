@@ -53,7 +53,7 @@ plot_update_episode_factor = 100
 save_target_network_factor = 200
 
 # Render's the agent performing the eps after a certain number of episodes
-render_agent = -1 #num_training_episodes//3
+render_agent = num_training_episodes//3
 
 # Will set whether to use the user menu
 use_menu = False
@@ -65,7 +65,7 @@ show_processed_screens = False
 show_neural_net = True
 
 # Pass a file name to load in weights and test agent
-test_agent = None #"Pong-v0_Policy_Network_2800"
+test_agent = None # "MsPacman-v0_Policy_Network_6000"
 
 
 # Creates a graph of a state screen
@@ -283,7 +283,7 @@ def train_Q_agent(em, agent):
 
                 # Prints the current episode information if set
                 if use_menu == False:
-                    print(f"Current episode: {episode}")
+                    print(f"Current episode: {episode+1}")
                     print(f"Reward: {round(episode_reward,2)}")
                     if optimal_game_parameters[default_atari_game].step_reward != 0:
                         print(f"Environment reward: {round(environment_total_reward,2)}")
@@ -297,6 +297,22 @@ def train_Q_agent(em, agent):
                 if episode % plot_update_episode_factor == 0:
                     # Appends the number of steps
                     plot(episode_durations, False)
+
+                # Displays the estimated time remaining based on the previous execution time
+                if episode + 1 % 10 == 0 and memory.can_provide_sample(batch_size):
+                    prev_time = 0
+                    prev_episodes = episode_durations[-10:]
+                    for prev_episode in prev_episodes:
+                        prev_time += prev_episode["total_time"]
+
+                    average_time = prev_time/10
+                    episodes_left = num_training_episodes - episode
+
+                    estimated_time_remaining = average_time * episodes_left
+
+                    print()
+                    print(f"Current estimated time left: {round(estimated_time_remaining/60)} minutes")
+                    print()
 
                 # Episode is finished and breaks
                 break
@@ -336,7 +352,7 @@ def self_play(policy_net, em, agent):
 
         action = agent.select_exploitative_action(state, policy_net) # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
 
-        #print(f"taking action: {action}")
+        print(f"taking action: {action}")
 
         # Returns reward
         reward = em.take_action(action)

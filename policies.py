@@ -117,6 +117,7 @@ class QValues():
         # do not have a reward, hence all of the next states are checked, and if it has a reward of 0, then
         # it is a final state. These final states are represented as True in this case (as it is converted to a boolean)
         # so it is then known not to include them
+
         final_state_locations = next_states.flatten(start_dim=1) \
             .max(dim=1)[0].eq(final_state_reward).type(torch.bool)
 

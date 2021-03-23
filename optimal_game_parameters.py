@@ -153,9 +153,9 @@ optimal_game_parameters["Pong-v0"] = OptimalParameters(
 
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.01,
+    0.00005,
     [1, 0.1, 0.0005],
-    0.999,
+    0.99,
     [68, 40],
     [[0.05, 0.95], [0.25, 0.95]],
     "append",
@@ -163,7 +163,7 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     4,
     'DQN_CNN',
     {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
-    100,
+    40,
     10000,
     2,
     50,
