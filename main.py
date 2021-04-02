@@ -9,7 +9,6 @@ from itertools import count
 import torch.optim as optim
 from torchviz import make_dot
 
-
 # Imports all policies that the agent can follow to achieve optimal actions
 from policies import *
 
@@ -30,6 +29,7 @@ from result_handlers import *
 
 # Ensures that graph vision can work correctly
 import os
+
 os.environ["PATH"] += os.pathsep + "C:\\Program Files\\Graphviz\\bin"
 
 # Ensures that the results will be the same (same starting random seed each time)
@@ -47,13 +47,13 @@ actions_per_second = 15
 num_training_episodes = 12000
 
 # Updates the plot after so many episodes
-plot_update_episode_factor = 100
+plot_update_episode_factor = 20
 
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
 
 # Render's the agent performing the eps after a certain number of episodes
-render_agent = num_training_episodes//3
+render_agent = num_training_episodes // 100
 
 # Will set whether to use the user menu
 use_menu = False
@@ -65,7 +65,7 @@ show_processed_screens = False
 show_neural_net = True
 
 # Pass a file name to load in weights and test agent
-test_agent = None # "MsPacman-v0_Policy_Network_6000"
+test_agent = None
 
 
 # Creates a graph of a state screen
@@ -79,7 +79,6 @@ def display_processed_screens(next_state_screen, state_screen_cmap, step):
 
 # Extracts tensors from experiences
 def extract_tensors(experiences):
-
     # Convert batch of Experiences to Experience of batches
     batch = Experience(*zip(*experiences))
 
@@ -101,7 +100,7 @@ def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Establishes the replay memory
-    memory = ReplayMemory(optimal_game_parameters[default_atari_game].memory_size)
+    memory = ReplayMemory(optimal_game_parameters[default_atari_game].memory_size, 10000)
 
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
@@ -109,10 +108,14 @@ def train_Q_agent(em, agent):
 
     colour_type = optimal_game_parameters[default_atari_game].colour_type
 
+    num_returned_states = 1
+    if optimal_game_parameters[default_atari_game].screen_process_type == "append":
+        num_returned_states = optimal_game_parameters[default_atari_game].prev_states_queue_size
+
     if colour_type == "rgb":
-        input_channels = 3
+        input_channels = 3 * num_returned_states
     else:
-        input_channels = 1
+        input_channels = 1 * num_returned_states
 
     # Uses a deep neural network (without convolution layers)
     if optimal_game_parameters[default_atari_game].policy == "DQN":
@@ -125,16 +128,27 @@ def train_Q_agent(em, agent):
         target_net = DQN(screen_height, screen_width, em.num_actions_available()).to(device)
 
     # Uses a deep neural network (with convolution layers)
-    elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN":
+    elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN_Basic":
         # Establishes Policy and Target networks
-        policy_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(), input_channels,
-                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+        policy_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
+                                   optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        target_net = DQN_CNN(screen_height, screen_width, em.num_actions_available(), input_channels,
-                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+        target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
+                                   optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+
+    elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN_Advanced":
+        policy_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
+                                      em.num_actions_available(), input_channels,
+                                      optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+
+        policy_net.apply(initialise_weights)
+
+        target_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
+                                      em.num_actions_available(), input_channels,
+                                      optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
     else:
         raise Exception("Policy and target networks not established")
@@ -174,7 +188,6 @@ def train_Q_agent(em, agent):
 
         # Total episode Reward
         episode_reward = 0
-        environment_total_reward = 0
 
         # Start time of the episode
         start = time.time()
@@ -188,14 +201,6 @@ def train_Q_agent(em, agent):
             # Returns reward
             reward = em.take_action(action)
 
-            if optimal_game_parameters[default_atari_game].step_reward != 0:
-                environment_total_reward += reward.numpy()[0]
-
-            if em.done:
-                reward += optimal_game_parameters[default_atari_game].ending_reward
-            else:
-                reward += optimal_game_parameters[default_atari_game].step_reward
-
             episode_reward += reward.numpy()[0]
 
             # Returns next state
@@ -208,7 +213,9 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if step % 100 and show_processed_screens:
+            if step % 100 and show_processed_screens and \
+                    optimal_game_parameters[default_atari_game].screen_process_type != "append":
+
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
                 if optimal_game_parameters[default_atari_game].colour_type == "RGB":
@@ -225,7 +232,6 @@ def train_Q_agent(em, agent):
 
             # Retrieves a sample if possible and assigns this to the variable 'Experiences'
             if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
-
                 experiences = memory.sample(batch_size)
 
                 # Extracts all states, actions, reward and next states into their own tensors
@@ -236,20 +242,21 @@ def train_Q_agent(em, agent):
 
                 # Extracts next Q values of the best corresponding actions of the target network
                 # The target network is used for finding the next best actions
-                next_q_values = QValues.get_next(target_net, next_states,
-                                                 optimal_game_parameters[default_atari_game].ending_reward)
+                next_q_values = QValues.get_next(target_net, next_states)
+
+                # next_q_values = QValues.get_next_DDQN(target_net, target_net, next_states)
 
                 # Uses formula E[reward + gamma * maxarg(next state)] to update Q values
                 target_q_values = (next_q_values * optimal_game_parameters[default_atari_game].discount) + rewards
-
-                # Calculates loss between the current Q values and the target Q values by using the
-                # mean squared error as the loss function
-                loss = F.mse_loss(current_q_values, target_q_values.unsqueeze(1))
 
                 # Sets the all gradients of all the weights and biases in the policy network to 0
                 # As pytorch accumulates gradients every time it is used, it needs to be reset as to not
                 # Factor in old gradients and biases
                 optimizer.zero_grad()
+
+                # Calculates loss between the current Q values and the target Q values by using the
+                # mean squared error as the loss function
+                loss = F.mse_loss(current_q_values, target_q_values.unsqueeze(1))
 
                 # Computes the gradients of loss (error) of all the weights and biases in the policy network
                 loss.backward()
@@ -269,29 +276,25 @@ def train_Q_agent(em, agent):
                 for prev_episode in prev_fifty_episodes:
                     prev_rewards += prev_episode["total_reward"]
 
-                prev_rewards = round(((prev_rewards + episode_reward)/(len(prev_fifty_episodes)+1)), 2)
+                prev_rewards = round(((prev_rewards + episode_reward) / (len(prev_fifty_episodes) + 1)), 2)
 
                 # Includes all episode information (time, reward, steps)
                 episode_info = {"num_steps": step, "total_reward": episode_reward,
                                 "total_time": total_time[0:total_time.find('.') + 3],
                                 "moving_average": prev_rewards}
 
-                if optimal_game_parameters[default_atari_game].step_reward != 0:
-                    episode_info["environment_total_reward"] = environment_total_reward
-
                 # Appends the episode information
                 episode_durations.append(episode_info)
 
                 # Prints the current episode information if set
-                if use_menu == False:
-                    print(f"Current episode: {episode+1}")
-                    print(f"Reward: {round(episode_reward,2)}")
-                    if optimal_game_parameters[default_atari_game].step_reward != 0:
-                        print(f"Environment reward: {round(environment_total_reward,2)}")
+                if not use_menu:
+                    print(f"Current episode: {episode + 1}")
+                    print(f"Reward: {round(episode_reward, 2)}")
                     print(f"Steps: {step}")
                     print(f"Moving_average: {prev_rewards}")
-                    print(f"Current epsilon: {agent.return_exploration_rate(episode)}")
+                    print(f"Current epsilon: {round(agent.return_exploration_rate(episode), 3)}")
                     print(f"Time: {total_time[0:total_time.find('.') + 3]}")
+                    print(f"Training: {memory.can_provide_sample(batch_size)}")
                     print()
 
                 # Draws graph depending on the plot update factor
@@ -306,14 +309,15 @@ def train_Q_agent(em, agent):
                     for prev_episode in prev_episodes:
                         prev_time += float(prev_episode["total_time"])
 
-                    average_time = prev_time/10
+                    average_time = prev_time / 10
                     episodes_left = num_training_episodes - episode
 
                     estimated_time_remaining = average_time * episodes_left
 
                     print()
-                    print(f"Current estimated time left: {round(estimated_time_remaining/60)//60} hrs "
-                          f"{round(estimated_time_remaining/60) % 60} mins")
+                    print(f"Current estimated time left: {round(estimated_time_remaining / 60) // 60} hrs "
+                          f"{round(estimated_time_remaining / 60) % 60} mins")
+                    print(f"Current replay memory size: {memory.current_memory_size()}")
                     print()
 
                 # Episode is finished and breaks
@@ -352,9 +356,18 @@ def self_play(policy_net, em, agent):
     while True:
         step_start_time = time.time()
 
-        action = agent.select_exploitative_action(state, policy_net) # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
+        random_value = random.random()
+
+        if 0.5 > random_value:
+            print("Random:")
+            action = agent.select_random_action()
+        else:
+            print("Exploits:")
+            action = agent.select_exploitative_action(state,
+                                                      policy_net)  # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
 
         print(f"taking action: {action}")
+        print()
 
         # Returns reward
         reward = em.take_action(action)
@@ -367,12 +380,14 @@ def self_play(policy_net, em, agent):
 
         # Syncs environment FPS
         computation_time = time.time() - step_start_time
-        break_time = 1/game_FPS - computation_time
+        break_time = 1 / game_FPS - computation_time
 
         if break_time > 0:
-            time.sleep(1/game_FPS)
+            time.sleep(1 / game_FPS)
 
         current_frame += 1
+
+    em.close()
 
 
 # Lets the agent play the game either solo, against the user or against another agent
@@ -430,8 +445,8 @@ def print_agent_information(em):
 
     # Custom reward values
     print("Custom rewards:")
-    print(f"Step reward: {current_game_parameters.step_reward}")
-    print(f"Ending reward: {current_game_parameters.ending_reward}")
+    for scheme, reward in current_game_parameters.reward_scheme.items():
+        print(f"\t-{scheme.capitalize().replace('_', ' ')}: {reward}")
     print()
 
     # Parameters for how choices are made
@@ -459,7 +474,7 @@ def print_agent_information(em):
     print("Neural network parameters:")
     print(f"\t-Network type: {current_game_parameters.policy}")
     for current_property, value in current_game_parameters.policy_parameters.items():
-        print(f"\t-{current_property.capitalize()}: {value}")
+        print(f"\t-{current_property.capitalize().replace('_', ' ')}: {value}")
     print()
 
     print("Replay parameters:")
@@ -492,21 +507,30 @@ def test(policy_name: str):
 
     colour_type = optimal_game_parameters[atari_game].colour_type
 
+    num_returned_states = 1
+    if optimal_game_parameters[default_atari_game].screen_process_type == "append":
+        num_returned_states = optimal_game_parameters[default_atari_game].prev_states_queue_size
+
     if colour_type == "rgb":
-        input_channels = 3
+        input_channels = 3 * num_returned_states
     else:
-        input_channels = 1
+        input_channels = 1 * num_returned_states
 
     if optimal_game_parameters[default_atari_game].policy == "DQN":
         # Sets up input sizes for the networks
-        test_net = DQN(test_em.get_screen_height(), test_em.get_screen_width(), test_em.num_actions_available()).to(device)
+        test_net = DQN(test_em.get_screen_height(), test_em.get_screen_width(), test_em.num_actions_available()).to(
+            device)
 
         # Uses a deep neural network (with convolution layers)
     elif optimal_game_parameters[default_atari_game].policy == "DQN_CNN":
         # Establishes Policy and Target networks
-        test_net = DQN_CNN(test_em.get_screen_height(),  test_em.get_screen_width(), test_em.num_actions_available(), input_channels,
-                             optimal_game_parameters[default_atari_game].policy_parameters).to(device)
+        test_net = DQN_CNN_Basic(test_em.get_screen_height(), test_em.get_screen_width(),
+                                 test_em.num_actions_available(), input_channels,
+                                 optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
+    test_net = DQN_CNN_Advanced(test_em.get_screen_height(), test_em.get_screen_width(),
+                                test_em.num_actions_available(), input_channels,
+                                optimal_game_parameters[default_atari_game].policy_parameters).to(device)
 
     storage = torch.load(f"network_weights/{policy_name}")
     if not storage:
@@ -535,9 +559,13 @@ def return_env_with_atari_game(atari_game):
         prev_states_queue_size = optimal_game_parameters[atari_game].prev_states_queue_size
         colour_type = optimal_game_parameters[atari_game].colour_type
 
+        reward_scheme = optimal_game_parameters[atari_game].reward_scheme
+
+        # em = AtariEnvManager("cpu", default_atari_game, False)
+
         # Environment is set to the passed atari game
         em = EnvironmentManager(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                prev_states_queue_size, colour_type)
+                                prev_states_queue_size, colour_type, reward_scheme)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
@@ -546,7 +574,6 @@ def return_env_with_atari_game(atari_game):
 
 
 def main(arguements, default_atari_game):
-
     if test_agent is not None:
         test(test_agent)
         return True
@@ -604,7 +631,7 @@ def main(arguements, default_atari_game):
         # Agent is created
         agent = Agent(strategy, em.num_actions_available())
 
-        print(f"All atari games: {em.return_avaliable_atari_games()}")
+        # print(f"All atari games: {em.return_avaliable_atari_games()}")
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
@@ -630,7 +657,8 @@ def main(arguements, default_atari_game):
         # Attempts to load the specific game DQN
         storage = torch.load(f"network_weights/{default_atari_game}_Policy_Network_Final")
         if not storage:
-            raise FileNotFoundError(f"Could not load in neural network for game {default_atari_game}, please restart and train a new one")
+            raise FileNotFoundError(
+                f"Could not load in neural network for game {default_atari_game}, please restart and train a new one")
         policy_net.load_state_dict(storage)
 
     # Agent plays the game according to the user play type input
@@ -646,5 +674,3 @@ if __name__ == '__main__':
     main(arguements, default_atari_game)
     print("Thank you for using Ataria")
     exit(0)
-
-

@@ -11,13 +11,17 @@ np.random.seed(0)
 
 # Handles the gym environment and all properties regarding game states
 class EnvironmentManager():
-    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type):
+    def __init__(self, game, crop_factors, resize, screen_process_type,
+                 prev_states_queue_size, colour_type, custom_rewards):
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = gym.make(game).unwrapped
         self.env.seed(0)
         self.env.reset()
         self.done = False # Episode has not finished
+        self.state_info = None
         self.colour_type = colour_type
+        self.current_screen = None
 
         # The state return format
         self.screen_process_type = screen_process_type.lower().strip()
@@ -32,10 +36,17 @@ class EnvironmentManager():
         self.num_states = prev_states_queue_size
         self.current_state_num = 0
 
+        self.use_additional_info = True
+        self.life_change_reward = int(custom_rewards["lives_change_reward"])
+        self.one_life_only = custom_rewards["one_life_game"]
+        self.normalise_rewards = custom_rewards["normalise_rewards"]
+
     # Resets the environment and state number
     def reset(self):
         self.env.reset()
         self.current_state_num = 0
+        self.state_queue = []
+        self.current_screen = None
 
     # Closes environment
     def close(self):
@@ -44,6 +55,9 @@ class EnvironmentManager():
     # Renders environment
     def render(self, mode='human'):
         return self.env.render(mode)
+
+    def just_starting(self):
+        return self.current_screen is None
 
     # Finishes episode prematurely
     def set_episode_end(self):
@@ -54,46 +68,69 @@ class EnvironmentManager():
         return self.env.action_space.n
 
     # Returns all the avaliables atari games
-    def return_avaliable_atari_games(self):
+    @staticmethod
+    def return_avaliable_atari_games():
         return sorted(atari_py.list_games())
 
-    # Updates the state in queue and increases current step number
-    def update_state_queue(self):
-        self.state_queue[self.current_state_num % self.num_states] = self.get_processed_screen()
-        self.current_state_num += 1
+    # State queue is set to all black screens (as it is the start of a new episode)
+    def reset_state_queue(self):
+        self.current_screen = self.get_processed_screen()
+        black_screen = torch.zeros_like(self.current_screen)
+        for state in range(self.num_states):
+            self.state_queue.append(black_screen)
 
-    # Resets the state queue to all black, or to the first state that is returned
-    def reset_queue(self, reset_type="normal"):
-        current_screen = self.get_processed_screen()
+    # Handles potential additional rewards (such as for losing a life)
+    def additional_rewards(self, new_state_info):
+        if not self.state_info:
+            return 0
 
-        # Iterates through the queue size and adds the first state to the queue
-        for i in range(self.num_states):
-            # Sets queue full of black screens (array of zeros)
-            if reset_type == "black":
-                self.state_queue.append(torch.zeros_like(current_screen))
+        additional_reward = 0
 
-            # Sets queue full of first screen
-            elif reset_type == "normal":
-                self.state_queue.append(current_screen)
+        # Checks if the current game has a lives counter
+        if 'ale.lives' in new_state_info.keys() and 'ale.lives' in self.state_info:
 
-            # Returns error if screen type is not valid
-            else:
-                raise ValueError("Reset type not valid")
+            prev_lives = self.state_info["ale.lives"]
+            current_lives = new_state_info["ale.lives"]
+
+            # If the previous lives is greater than the current lives, it means the agent has lost a life,
+            # and thus the appropriate reward is given. If 'one life only' is set, then the environment terminates
+            # early with a negative reward
+            if prev_lives > current_lives:
+                if self.one_life_only:
+                    self.set_episode_end()
+                additional_reward = self.life_change_reward
+
+            # If the previous lives is less than the current lives, then the agent has gained a life, and thus the
+            # negative of the 'life lost' reward is given
+            elif prev_lives < current_lives:
+                additional_reward = self.life_change_reward * -1
+
+        return additional_reward
 
     # Takes an action in the environment
     def take_action(self, action):
         # Action is a tensor and thus is an item
-        state, reward, self.done, info = self.env.step(action.item())
+        state, reward, self.done, state_info = self.env.step(action.item())
 
-        # Increases number of states that have been traversed in this episode
-        if self.screen_process_type != "standard":
-            self.update_state_queue()
+        # If additional rewards are set, then this is returned and the additional state information is updated
+        extra_reward = 0
+        if self.use_additional_info:
+            extra_reward = self.additional_rewards(state_info)
+
+        self.state_info = state_info
+
+        final_reward = extra_reward + reward
 
         # Returns the reward as a tensor
-        return torch.tensor([reward], device=self.device)
+        return torch.tensor([final_reward], device=self.device)
 
     # Returns the current state of the environment depending on the process type
     def get_state(self):
+        # Queue is reset
+        if self.just_starting():
+            self.reset_state_queue()
+
+        # Each of the different state methods are activated
         if self.screen_process_type == "difference":
             return self.get_difference_state()
         elif self.screen_process_type == "append":
@@ -113,46 +150,49 @@ class EnvironmentManager():
     # This highlights the changes that have been made between these two states. This is advantageous
     # for environments where movement is key and static
     def get_difference_state(self):
-        # Check to see if the screen is just starting or just ended (cannot be the difference of two screens)
-        if len(self.state_queue) == 0 or self.done:
-            # Fills queue with black screens and returns the first state
-            self.reset_queue("black")
-            return self.state_queue[0]
 
-        # Returns the difference of the current and previous screens
+        self.current_screen = self.get_processed_screen()
+
+        # If the episode has finisehd, then the final screen should be all black
+        if self.done:
+            black_screen = torch.zeros_like(self.current_screen)
+            return black_screen
         else:
             # Chooses last state in the queue and subtracts from the latest state in the queue
-            oldest_queue_state = self.state_queue[self.current_state_num % self.num_states - 1]
-            current_state = self.state_queue[self.current_state_num % self.num_states]
+            oldest_queue_state = self.state_queue.pop(0)
+            current_state = self.state_queue[self.num_states-1]
+            self.state_queue.append(self.current_screen)
             return current_state - oldest_queue_state
 
     # Returns the appended state, this involves appending each of the queues together to form a large
     # vertical image that is what is evaluated by the neural network
     def get_appended_state(self):
-        # Check to see if the screen is just starting or just ended, if so the queue is reset to the first state
-        if len(self.state_queue) == 0:
-            self.reset_queue("normal")
 
-        # Combine all the states into one large vertical image
-        combined_states = self.state_queue[0]
-        for i in range(1, self.num_states):
-            combined_states = torch.cat((combined_states, self.state_queue[i]), 2)
+        self.current_screen = self.get_processed_screen()
 
-        # If the episode has finished, set the queue to empty and return the latest queue
-        if self.done and self.current_state_num != 0:
-            self.state_queue = []
+        # If the episode has finished, add a black screen to the queue
+        if self.done:
+            black_screen = torch.zeros_like(self.current_screen)
+            self.state_queue.pop(0)
+            self.state_queue.append(black_screen)
 
-        return combined_states
+        # Else append the current screen to the queue and remove oldest state
+        else:
+            self.state_queue.pop(0)
+            self.state_queue.append(self.current_screen)
+
+        return torch.stack(self.state_queue, dim=1).squeeze(2)
 
     def get_morphed_state(self):
-        # Check to see if the screen is just starting or just ended, if so the queue is reset to the first state
-        if len(self.state_queue) == 0:
-            self.reset_queue("normal")
+
+        self.current_screen = self.get_processed_screen()
 
         # Combines all states by adding all values together
-        morphed_states = self.state_queue[0]
+        morphed_states =  self.state_queue.pop(0)
         for i in range(1, self.num_states):
             morphed_states = torch.add(morphed_states,  self.state_queue[i])
+
+        self.state_queue.append(self.current_screen)
 
         # Takes the average of all taken states
         morphed_states /= self.num_states

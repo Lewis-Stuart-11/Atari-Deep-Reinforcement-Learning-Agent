@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import random
 from collections import namedtuple
 import torch
+import numpy as np
 
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
@@ -42,9 +43,9 @@ class DQN(nn.Module):
 
 
 # A deep neural network with convoluted layers to process the image
-class DQN_CNN(nn.Module):
+class DQN_CNN_Basic(nn.Module):
     def __init__(self, h, w, outputs, input_channels,  nn_structure: dict):
-        super(DQN_CNN, self).__init__()
+        super(DQN_CNN_Basic, self).__init__()
 
         # Properties for how the convoluted neural network
         kernel_sizes = nn_structure["kernel_sizes"]
@@ -87,6 +88,48 @@ class DQN_CNN(nn.Module):
         return self.head(x.view(x.size(0), -1))
 
 
+# More complex CNN with multiple linear layers
+class DQN_CNN_Advanced(nn.Module):
+    def __init__(self, h, w, outputs, input_channels, nn_structure: dict):
+        super().__init__()
+
+        kernel_sizes = nn_structure["kernel_sizes"]
+        strides = nn_structure["strides"]
+        neurons_per_layer = nn_structure["neurons_per_layer"]
+
+        self.cnn = nn.Sequential(nn.Conv2d(input_channels, neurons_per_layer[0], kernel_size=kernel_sizes[0], stride=strides[0]),
+                                        nn.ReLU(True),
+                                        nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1], kernel_size=kernel_sizes[1], stride=strides[1]),
+                                        nn.ReLU(True),
+                                        nn.Conv2d(neurons_per_layer[1], neurons_per_layer[2], kernel_size=kernel_sizes[2], stride=strides[2]),
+                                        nn.ReLU(True)
+                                        )
+
+        def conv2d_size_out(size, kernel_size=5, stride=2):
+            return (size - (kernel_size - 1) - 1) // stride + 1
+
+        convw = w
+        convh = h
+        for i in range(3):
+            convw = conv2d_size_out(convw, kernel_sizes[i], strides[i])
+            convh = conv2d_size_out(convh, kernel_sizes[i], strides[i])
+
+        # Head input size
+        linear_input_size = convw * convh * neurons_per_layer[2]
+
+        self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
+                                        nn.ReLU(True),
+                                        nn.Linear(neurons_per_layer[3], outputs)
+                                        )
+
+    def forward(self, x):
+        x = self.cnn(x)
+
+        x = torch.flatten(x, start_dim=1)
+        x = self.classifier(x)
+        return x
+
+
 # Sets the weights between -0.01 and 0.01
 def initialise_weights(model):
     if type(model) == nn.Conv2d or type(model) == nn.Linear:
@@ -107,7 +150,7 @@ class QValues():
 
     @staticmethod
     # Accepts the target network and next states
-    def get_next(target_net, next_states, final_state_reward):
+    def get_next(target_net, next_states):
 
         # Finds the locations of all the final states (these are the states that occur after the
         # the state is occured that ended the episode)
@@ -118,8 +161,10 @@ class QValues():
         # it is a final state. These final states are represented as True in this case (as it is converted to a boolean)
         # so it is then known not to include them
 
-        final_state_locations = next_states.flatten(start_dim=1) \
-            .max(dim=1)[0].eq(final_state_reward).type(torch.bool)
+        last_screens_of_state = next_states[:, -1, :, :]  # (B,H,W)
+
+        final_state_locations = last_screens_of_state.flatten(start_dim=1) \
+            .max(dim=1)[0].eq(0).type(torch.bool)
 
         # All non-final state_locations are the opposites of the final state locations
         non_final_state_locations = (final_state_locations == False)
@@ -134,9 +179,30 @@ class QValues():
         # Sets corresponding values of all the next state locations as the
         # maximum predicted Q values of the target network for each actions
         # (returns the maximum Q values for all actions) for each non-final state
-        values[non_final_state_locations] = target_net(non_final_states).max(dim=1)[0].detach()
+        with torch.no_grad():
+            values[non_final_state_locations] = target_net(non_final_states).max(dim=1)[0].detach()
 
         # These Q values are then returned
+        return values
+
+    @staticmethod
+    def get_next_DDQN(policy_net, target_net, next_states):
+        last_screens_of_state = next_states[:, -1, :, :]  # (B,H,W)
+        final_state_locations = last_screens_of_state.flatten(start_dim=1).max(dim=1)[0].eq(0).type(torch.bool)
+        non_final_state_locations = (final_state_locations == False)
+        non_final_states = next_states[non_final_state_locations]  # (B',4,H,W)
+        batch_size = next_states.shape[0]
+        # print("# of none terminal states = ", batch_size)
+        values = torch.zeros(batch_size).to(QValues.device)
+        if non_final_states.shape[0] == 0:  # BZX: check if there is survival
+            print("EXCEPTION: this batch is all the last states of the episodes!")
+            return values
+        # BZX: different from DQN
+        with torch.no_grad():
+            argmax_a = policy_net(non_final_states).detach().max(dim=1)[1]
+            values[non_final_state_locations] = target_net(non_final_states).detach().gather(dim=1,
+                                                                                             index=argmax_a.unsqueeze(
+                                                                                                 -1)).squeeze(-1)
         return values
 
 
@@ -149,11 +215,14 @@ Experience = namedtuple(
 
 # Stores all the previous experiences and is used for helping the agent learn
 class ReplayMemory():
-    def __init__(self, capacity):
+    def __init__(self, capacity, start_size):
         self.capacity = capacity
         self.memory = []
         self.push_count = 0
-        self.start_size = 2000
+        self.start_size = start_size
+
+        if start_size > capacity:
+            raise ValueError("Replay capacity cannot be smaller than the start size")
 
     # Pushes the new experience to the replay memory queue
     def push(self, experience):

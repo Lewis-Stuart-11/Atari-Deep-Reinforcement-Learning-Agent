@@ -20,8 +20,7 @@ OptimalParameters = namedtuple(
      'memory_size',  # How many experiences to save to memory
      'target_update',  # How many episodes before the target neural network should be updated with the policy networks weights
      'update_factor',  # How many steps per episode before performing a batch weight update
-     'step_reward',  # The reward for the agent still being in play
-     'ending_reward'  # The reward for if the episode finishes
+     'reward_scheme'  # An dictionary of custom rewards for different situations
      )
 )
 
@@ -33,7 +32,9 @@ optimal_game_parameters = {}
 def validate_game_parameters(game_parameters: OptimalParameters):
     # Valid values to set colour, policy and processing values
     valid_colour_types = ["rgb", "gray", "binary"]
-    available_policies = {"DQN_CNN": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3}, "DQN": {"neurons_per_layer": 3}}
+    available_policies = {"DQN_CNN_Advanced": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 4},
+                          "DQN_CNN_Basic": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3},
+                          "DQN": {"neurons_per_layer": 3}}
     available_screen_processing_types = ["append", "difference", "standard", "morph"]
 
     # Learning rate must be between 1-0
@@ -121,15 +122,6 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     if not (100 >= game_parameters.target_update > 1):
         raise ValueError(f"Target update factor must be between 1 and 100")
 
-    # The step reward cannot be too large otherwise this would produce poor results
-    if not (1 >= game_parameters.step_reward >= -1):
-        raise ValueError(f"Step reward must be between 0-1")
-
-    # The ending reward refers to the reward the agent will receive for finishing an episode
-    # This can be positive or negative
-    if not (10 >= game_parameters.ending_reward >= -10):
-        raise ValueError(f"Step reward must be between 10 and -10")
-
 
 # Optimal Pong parameters
 optimal_game_parameters["Pong-v0"] = OptimalParameters(
@@ -147,28 +139,26 @@ optimal_game_parameters["Pong-v0"] = OptimalParameters(
     10000,
     2,
     50,
-    0,
-    -0.01
+    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
 )
 
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.00005,
-    [1, 0.1, 0.0005],
+    [1, 0.1, 0.00025],
     0.99,
-    [68, 40],
+    [84, 84],
     [[0.05, 0.95], [0.25, 0.95]],
     "append",
     "gray",
     4,
-    'DQN_CNN',
-    {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
+    'DQN_CNN_Advanced',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 650]},
     40,
-    500000,
+    25000,
+    20,
     10,
-    3,
-    0,
-    -0.01
+    {"lives_change_reward": 0, "one_life_game": False, "normalise_rewards": False}
 )
 
 # Optimal Pacman parameters
@@ -181,14 +171,13 @@ optimal_game_parameters["MsPacman-v0"] = OptimalParameters(
     "standard",
     "rgb",
     4,
-    'DQN_CNN',
-    {"kernel_sizes": [6, 3, 2], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
+    'DQN_CNN_Advanced',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 1024]},
     200,
     10000,
     2,
     25,
-    0,
-    -1
+    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
 )
 
 """
@@ -223,6 +212,5 @@ optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     100000,
     10,
     10,
-    0,
-    0
+    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
 )
