@@ -5,6 +5,7 @@ import gym
 import torch
 import numpy as np
 import atari_py
+import math
 
 # Ensures that the results will be the same (same starting random seed each time)
 np.random.seed(0)
@@ -12,7 +13,10 @@ np.random.seed(0)
 # Handles the gym environment and all properties regarding game states
 class EnvironmentManager():
     def __init__(self, game, crop_factors, resize, screen_process_type,
-                 prev_states_queue_size, colour_type, custom_rewards):
+                 prev_states_queue_size, colour_type, custom_rewards=None):
+
+        if custom_rewards is None:
+            custom_rewards = {}
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = gym.make(game).unwrapped
@@ -37,9 +41,21 @@ class EnvironmentManager():
         self.current_state_num = 0
 
         self.use_additional_info = True
-        self.life_change_reward = int(custom_rewards["lives_change_reward"])
-        self.one_life_only = custom_rewards["one_life_game"]
-        self.normalise_rewards = custom_rewards["normalise_rewards"]
+
+        self.reward_scheme = {}
+        self.establish_reward_scheme(custom_rewards)
+
+    # Sets a default scheme unless a given reward scheme is passed
+    def establish_reward_scheme(self, custom_rewards):
+        default_scheme = {"lives_change_reward": 0, "one_life_game": False,
+                          "normalise_rewards": False, "use_given_reward": True,
+                          "end_on_negative": False}
+
+        for scheme, default in default_scheme.items():
+            if scheme not in custom_rewards.keys():
+                self.reward_scheme[scheme] = default
+            else:
+                self.reward_scheme[scheme] = custom_rewards[scheme]
 
     # Resets the environment and state number
     def reset(self):
@@ -80,14 +96,18 @@ class EnvironmentManager():
             self.state_queue.append(black_screen)
 
     # Handles potential additional rewards (such as for losing a life)
-    def additional_rewards(self, new_state_info):
+    def additional_rewards(self, new_state_info, given_reward):
         if not self.state_info:
             return 0
 
         additional_reward = 0
 
+        if self.reward_scheme["end_on_negative"] and given_reward < 0:
+            self.set_episode_end()
+            additional_reward = int(self.reward_scheme["lives_change_reward"])
+
         # Checks if the current game has a lives counter
-        if 'ale.lives' in new_state_info.keys() and 'ale.lives' in self.state_info:
+        elif 'ale.lives' in new_state_info.keys() and 'ale.lives' in self.state_info:
 
             prev_lives = self.state_info["ale.lives"]
             current_lives = new_state_info["ale.lives"]
@@ -96,14 +116,14 @@ class EnvironmentManager():
             # and thus the appropriate reward is given. If 'one life only' is set, then the environment terminates
             # early with a negative reward
             if prev_lives > current_lives:
-                if self.one_life_only:
+                if self.reward_scheme["one_life_game"]:
                     self.set_episode_end()
-                additional_reward = self.life_change_reward
+                additional_reward = int(self.reward_scheme["lives_change_reward"])
 
             # If the previous lives is less than the current lives, then the agent has gained a life, and thus the
             # negative of the 'life lost' reward is given
             elif prev_lives < current_lives:
-                additional_reward = self.life_change_reward * -1
+                additional_reward = int(self.reward_scheme["lives_change_reward"]) * -1
 
         return additional_reward
 
@@ -112,14 +132,22 @@ class EnvironmentManager():
         # Action is a tensor and thus is an item
         state, reward, self.done, state_info = self.env.step(action.item())
 
+        if not self.reward_scheme["use_given_reward"]:
+            reward = 0
+
         # If additional rewards are set, then this is returned and the additional state information is updated
         extra_reward = 0
         if self.use_additional_info:
-            extra_reward = self.additional_rewards(state_info)
-
+            extra_reward = self.additional_rewards(state_info, reward)
         self.state_info = state_info
 
+
         final_reward = extra_reward + reward
+
+        # If normalise rewards is set, then every reward will always be 1 or -1
+        if self.reward_scheme["normalise_rewards"]:
+            if final_reward != 0:
+                final_reward = math.copysign(1, final_reward) # Returns -1 or 1
 
         # Returns the reward as a tensor
         return torch.tensor([final_reward], device=self.device)

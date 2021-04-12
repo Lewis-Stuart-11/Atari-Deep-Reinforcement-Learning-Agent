@@ -7,6 +7,7 @@ OptimalParameters = namedtuple(
     'OptimalParameters',
     (
      'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
+     'epsilon_strategy', # The strategy for returning the epsilon values
      'epsilon_values',  # Exploration vs Exploration values
      'discount',  # How impactful future rewards are
      'resize',  # The final size of the screen to enter into the neural network
@@ -32,18 +33,22 @@ optimal_game_parameters = {}
 def validate_game_parameters(game_parameters: OptimalParameters):
     # Valid values to set colour, policy and processing values
     valid_colour_types = ["rgb", "gray", "binary"]
+
     available_policies = {"DQN_CNN_Advanced": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 4},
                           "DQN_CNN_Basic": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3},
                           "DQN": {"neurons_per_layer": 3}}
+
     available_screen_processing_types = ["append", "difference", "standard", "morph"]
+
+    available_strategies = ["epsilon greedy", "epsilon greedy advanced"]
 
     # Learning rate must be between 1-0
     if not(1 >= game_parameters.learning_rate > 0):
         raise ValueError(f"Learning rate must be between 1 and 0")
 
-    # At least 3 episilon values need to be included
-    if len(game_parameters.epsilon_values) < 3:
-        raise ValueError(f"Epsilon values must include start, finish and decay factors")
+    # Epsilon strategy must be valid
+    if game_parameters.epsilon_strategy.lower() not in available_strategies:
+        raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies} ")
 
     # Each epsilon value must be between 1-0 to be valid
     for value in game_parameters.epsilon_values:
@@ -124,28 +129,57 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
 
 # Optimal Pong parameters
-optimal_game_parameters["Pong-v0"] = OptimalParameters(
-    0.01,
-    [1, 0.1, 0.0005],
-    0.999,
-    [68, 40],
+optimal_game_parameters["PongDeterministic-v4"] = OptimalParameters(
+    0.00005,
+    "Epsilon Greedy Advanced",
+    [1, 0.1, 0.01, 0.0008, 0.00001],
+    0.99,
+    [80, 60],
     [[0.06, 0.94], [0.17, 0.92]],
     "append",
     "gray",
     4,
-    'DQN_CNN',
-    {"kernel_sizes": [6, 3, 3], 'strides': [3, 2, 1], 'neurons_per_layer': [32, 64, 32]},
-    100,
-    10000,
-    2,
-    50,
-    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
+    'DQN_CNN_Advanced',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
+    60,
+    25000,
+    6,
+    4,
+    {"use_given_reward": True, "lives_change_reward": 0, "one_life_game": False,
+     "normalise_rewards": False, "end_on_negative": False}
 )
+
+#Current episode: 4689
+#Reward: 340.0
+"""
+# Optimal Breakout parameters
+optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
+    0.00005,
+    "Epsilon Greedy Advanced",
+    [1, 0.1, 0.01, 0.0001, 0.00001],
+    0.99,
+    [84, 84],
+    [[0.05, 0.95], [0.45, 0.95]],
+    "append",
+    "gray",
+    4,
+    'DQN_CNN_Advanced',
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
+    20,
+    25000, #50000
+    6, # 10
+    4, # 5
+    {"use_given_reward": False, "lives_change_reward": -10, "one_life_game": False,
+     "normalise_rewards": False, "end_on_negative": False}
+)
+"""
+
 
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.00005,
-    [1, 0.1, 0.00025],
+    "Epsilon Greedy",
+    [1, 0.1, 0.0002], # 0.0005
     0.99,
     [84, 84],
     [[0.05, 0.95], [0.25, 0.95]],
@@ -153,52 +187,41 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     "gray",
     4,
     'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 650]},
-    40,
-    25000,
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
     20,
-    10,
-    {"lives_change_reward": 0, "one_life_game": False, "normalise_rewards": False}
+    25000, #50000
+    6, # 10
+    4, # 5
+    {"use_given_reward": True, "lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
 )
 
+
+
 # Optimal Pacman parameters
-optimal_game_parameters["MsPacman-v0"] = OptimalParameters(
-    0.001,
-    [1, 0.1, 0.0002],
-    0.999,
-    [100, 70],
+optimal_game_parameters["MsPacmanDeterministic-v0"] = OptimalParameters(
+    0.00005,
+    "Epsilon Greedy Advanced",
+    [1, 0.1, 0.01, 0.0002, 0.00001],
+    0.992,
+    [130, 100],
     [[0, 1], [0, 0.83]],
     "standard",
     "rgb",
-    4,
+    1,
     'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 1024]},
-    200,
-    10000,
-    2,
-    25,
-    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
-)
-
-"""
-# Optimal Breakout parameters
-optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.001,
-    [1, 0.1, 0.0025],
-    0.999,
-    [80, 50],
-    [[0.05, 0.95], [0.15, 0.95]],
-    "append",
+    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
+    60,
+    25000,
     4,
-    'DQN_CNN'
+    6,
+    {"use_given_reward": True, "lives_change_reward": -50, "one_life_game": False,
+     "normalise_rewards": False, "end_on_negative": False}
 )
-
-"""
-
 
 # Optimal Breakout parameters
 optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     0.001,
+    "Epsilon Greedy",
     [1, 0.01, 0.01],
     0.999,
     [40, 90],
@@ -212,5 +235,6 @@ optimal_game_parameters["CartPole-v0"] = OptimalParameters(
     100000,
     10,
     10,
-    {"lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
+    {"use_given_reward": True, "lives_change_reward": -10, "one_life_game": False,
+     "normalise_rewards": False, "end_on_negative": False}
 )

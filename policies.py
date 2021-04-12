@@ -152,6 +152,9 @@ class QValues():
     # Accepts the target network and next states
     def get_next(target_net, next_states):
 
+        # The latest state in the batch
+        last_screens_of_state = next_states[:, -1, :, :]
+
         # Finds the locations of all the final states (these are the states that occur after the
         # the state is occured that ended the episode)
         # In this context, a final state is a state that represents an all black screen
@@ -160,8 +163,6 @@ class QValues():
         # do not have a reward, hence all of the next states are checked, and if it has a reward of 0, then
         # it is a final state. These final states are represented as True in this case (as it is converted to a boolean)
         # so it is then known not to include them
-
-        last_screens_of_state = next_states[:, -1, :, :]  # (B,H,W)
 
         final_state_locations = last_screens_of_state.flatten(start_dim=1) \
             .max(dim=1)[0].eq(0).type(torch.bool)

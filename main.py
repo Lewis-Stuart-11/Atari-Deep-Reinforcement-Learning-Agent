@@ -44,16 +44,16 @@ game_FPS = 30
 actions_per_second = 15
 
 # Episodes to train
-num_training_episodes = 12000
+num_training_episodes = 30000
 
 # Updates the plot after so many episodes
-plot_update_episode_factor = 20
+plot_update_episode_factor = 50
 
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
 
 # Render's the agent performing the eps after a certain number of episodes
-render_agent = num_training_episodes // 100
+render_agent = 1
 
 # Will set whether to use the user menu
 use_menu = False
@@ -99,8 +99,10 @@ def extract_tensors(experiences):
 def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    replay_start = 5000
+
     # Establishes the replay memory
-    memory = ReplayMemory(optimal_game_parameters[default_atari_game].memory_size, 10000)
+    memory = ReplayMemory(optimal_game_parameters[default_atari_game].memory_size, replay_start)
 
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
@@ -213,7 +215,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if step % 100 and show_processed_screens and \
+            if (step % 10) == 0 and show_processed_screens and \
                     optimal_game_parameters[default_atari_game].screen_process_type != "append":
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
@@ -298,7 +300,7 @@ def train_Q_agent(em, agent):
                     print()
 
                 # Draws graph depending on the plot update factor
-                if episode % plot_update_episode_factor == 0:
+                if (episode + 1) % plot_update_episode_factor == 0:
                     # Appends the number of steps
                     plot(episode_durations, False)
 
@@ -440,7 +442,7 @@ def print_agent_information(em):
     print(f"Episodes: {num_training_episodes}")
     print(f"Discount factor: {current_game_parameters.discount}")
     print(f"Learning rate: {current_game_parameters.learning_rate}")
-    print(f"Policy used: {current_game_parameters.policy}")
+    print(f"Policy used: {current_game_parameters.policy.replace('_', ' ')}")
     print()
 
     # Custom reward values
@@ -466,21 +468,21 @@ def print_agent_information(em):
 
     # State processing types are displayed
     print("State processing types:")
-    print(f"Number of state queue: {current_game_parameters.prev_states_queue_size}")
-    print(f"States analysis type: '{current_game_parameters.screen_process_type}'")
+    print(f"\tNumber of state queue: {current_game_parameters.prev_states_queue_size}")
+    print(f"\tStates analysis type: '{current_game_parameters.screen_process_type}'")
     print()
 
     # The properties of the policy
     print("Neural network parameters:")
-    print(f"\t-Network type: {current_game_parameters.policy}")
+    print(f"\t-Network type: {current_game_parameters.policy.replace('_', ' ')}")
     for current_property, value in current_game_parameters.policy_parameters.items():
         print(f"\t-{current_property.capitalize().replace('_', ' ')}: {value}")
     print()
 
     print("Replay parameters:")
-    print(f"Number of experiences saved replay memory: {current_game_parameters.memory_size}")
-    print(f"Episodes to update target network (with policy network): {current_game_parameters.target_update}")
-    print(f"Steps per neural network update: {current_game_parameters.update_factor}")
+    print(f"\tNumber of experiences saved replay memory: {current_game_parameters.memory_size}")
+    print(f"\tEpisodes to update target network (with policy network): {current_game_parameters.target_update}")
+    print(f"\tSteps per neural network update: {current_game_parameters.update_factor}")
     print()
 
     # CUDA Information is displayed
@@ -626,7 +628,15 @@ def main(arguements, default_atari_game):
 
         # Action strategy is set
         episilon_values = optimal_game_parameters[default_atari_game].epsilon_values
-        strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
+
+        if optimal_game_parameters[default_atari_game].epsilon_strategy.lower() == "epsilon greedy":
+            strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
+
+        elif optimal_game_parameters[default_atari_game].epsilon_strategy.lower() == "epsilon greedy advanced":
+            strategy = EpsilonGreedyStrategyAdvanced(episilon_values[0], episilon_values[1], episilon_values[2],
+                                                     episilon_values[3], episilon_values[4])
+        else:
+            raise ValueError("Could not find appropriate epsilon strategy")
 
         # Agent is created
         agent = Agent(strategy, em.num_actions_available())
