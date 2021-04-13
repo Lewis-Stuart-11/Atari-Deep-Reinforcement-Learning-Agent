@@ -209,12 +209,12 @@ optimal_game_parameters["MsPacmanDeterministic-v0"] = OptimalParameters(
     "rgb",
     1,
     'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
+    {"kernel_sizes": [6, 3, 2], 'strides': [4, 2, 1], 'neurons_per_layer': [48, 84, 84, 1020]},
     60,
     25000,
     4,
     6,
-    {"use_given_reward": True, "lives_change_reward": -50, "one_life_game": False,
+    {"use_given_reward": True, "lives_change_reward": -100, "one_life_game": False,
      "normalise_rewards": False, "end_on_negative": False}
 )
 

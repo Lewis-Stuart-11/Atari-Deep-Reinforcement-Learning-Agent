@@ -44,10 +44,10 @@ game_FPS = 30
 actions_per_second = 15
 
 # Episodes to train
-num_training_episodes = 30000
+num_training_episodes = 15000
 
 # Updates the plot after so many episodes
-plot_update_episode_factor = 50
+plot_update_episode_factor = 10
 
 # How many times to save the current agent progress (saves neural network weights)
 save_target_network_factor = 200
@@ -203,7 +203,7 @@ def train_Q_agent(em, agent):
             # Returns reward
             reward = em.take_action(action)
 
-            episode_reward += reward.numpy()[0]
+            episode_reward += reward.cpu().numpy()[0]
 
             # Returns next state
             next_state = em.get_state()

@@ -81,7 +81,7 @@ def plot(info_per_episode, final):
         plt.savefig("Final Analysis")
 
     # Shows and closes the plot- in an IDE this will save in local memory for viewing
-    plt.show()
+    plt.savefig("Results-Reward.png")
     plt.close()
 
     # Sets up Rewards graph
@@ -110,7 +110,9 @@ def plot(info_per_episode, final):
 
     # Saves the final reward plot
     if final:
-        plt.savefig("Final Agent Rewards")
+        plt.savefig("Final Agent Reward.png")
 
-    plt.show()
+    #plt.show()
+    plt.savefig("Results-Reward.png")
     plt.close()
+
