@@ -151,7 +151,7 @@ optimal_game_parameters["PongDeterministic-v4"] = OptimalParameters(
 
 #Current episode: 4689
 #Reward: 340.0
-"""
+
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.00005,
@@ -172,9 +172,9 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     {"use_given_reward": False, "lives_change_reward": -10, "one_life_game": False,
      "normalise_rewards": False, "end_on_negative": False}
 )
+
+
 """
-
-
 # Optimal Breakout parameters
 optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     0.00005,
@@ -194,7 +194,7 @@ optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
     4, # 5
     {"use_given_reward": True, "lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
 )
-
+"""
 
 
 # Optimal Pacman parameters

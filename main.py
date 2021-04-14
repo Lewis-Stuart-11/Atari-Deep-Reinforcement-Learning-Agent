@@ -201,22 +201,23 @@ def train_Q_agent(em, agent):
             action = agent.select_action(state, policy_net, episode)
 
             # Returns reward
-            reward = em.take_action(action)
+            env_reward, custom_reward = em.take_action(action)
 
-            episode_reward += reward.cpu().numpy()[0]
+            # The total episode reward is set as the environment reward, as some scenarios will set a constant
+            # custom reward, which won't fairly show the agent's progress
+            episode_reward += env_reward.cpu().numpy()[0]
 
             # Returns next state
             next_state = em.get_state()
 
             # Adds experience to list of memory
-            memory.push(Experience(state, action, next_state, reward))
+            memory.push(Experience(state, action, next_state, custom_reward))
 
             # Updates new state
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if (step % 10) == 0 and show_processed_screens and \
-                    optimal_game_parameters[default_atari_game].screen_process_type != "append":
+            if (step % 10) == 0 and show_processed_screens:
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 

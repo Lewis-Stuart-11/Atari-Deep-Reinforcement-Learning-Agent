@@ -63,6 +63,7 @@ class EnvironmentManager():
         self.current_state_num = 0
         self.state_queue = []
         self.current_screen = None
+        self.is_first_action = True
 
     # Closes environment
     def close(self):
@@ -115,14 +116,14 @@ class EnvironmentManager():
             # If the previous lives is greater than the current lives, it means the agent has lost a life,
             # and thus the appropriate reward is given. If 'one life only' is set, then the environment terminates
             # early with a negative reward
-            if prev_lives > current_lives:
+            if prev_lives > current_lives and not self.is_first_action:
                 if self.reward_scheme["one_life_game"]:
                     self.set_episode_end()
                 additional_reward = int(self.reward_scheme["lives_change_reward"])
 
             # If the previous lives is less than the current lives, then the agent has gained a life, and thus the
             # negative of the 'life lost' reward is given
-            elif prev_lives < current_lives:
+            elif prev_lives < current_lives and not self.is_first_action:
                 additional_reward = int(self.reward_scheme["lives_change_reward"]) * -1
 
         return additional_reward
@@ -130,27 +131,31 @@ class EnvironmentManager():
     # Takes an action in the environment
     def take_action(self, action):
         # Action is a tensor and thus is an item
-        state, reward, self.done, state_info = self.env.step(action.item())
+        state, env_reward, self.done, state_info = self.env.step(action.item())
+
+        # Copies environment reward to be returned unaltered
+        actual_env_reward = env_reward
 
         if not self.reward_scheme["use_given_reward"]:
-            reward = 0
+            env_reward = 0
 
         # If additional rewards are set, then this is returned and the additional state information is updated
         extra_reward = 0
         if self.use_additional_info:
-            extra_reward = self.additional_rewards(state_info, reward)
+            extra_reward = self.additional_rewards(state_info, env_reward)
         self.state_info = state_info
 
-
-        final_reward = extra_reward + reward
+        final_reward = extra_reward + env_reward
 
         # If normalise rewards is set, then every reward will always be 1 or -1
         if self.reward_scheme["normalise_rewards"]:
             if final_reward != 0:
                 final_reward = math.copysign(1, final_reward) # Returns -1 or 1
 
+        self.is_first_action = False
+
         # Returns the reward as a tensor
-        return torch.tensor([final_reward], device=self.device)
+        return torch.tensor([actual_env_reward], device=self.device), torch.tensor([final_reward], device=self.device)
 
     # Returns the current state of the environment depending on the process type
     def get_state(self):
@@ -181,7 +186,7 @@ class EnvironmentManager():
 
         self.current_screen = self.get_processed_screen()
 
-        # If the episode has finisehd, then the final screen should be all black
+        # If the episode has finished, then the final screen should be all black
         if self.done:
             black_screen = torch.zeros_like(self.current_screen)
             return black_screen
