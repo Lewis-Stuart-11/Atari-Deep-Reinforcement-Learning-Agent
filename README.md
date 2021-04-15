@@ -7,6 +7,7 @@ Each of the following files provide the following functionality:
 * Environment handler- handles the transmission of states and actions between the GYM environment and the agent. Depending on the game, certain
 pre-processing techniques (condensing, state manipulation, colour correction) are performed on the state returned by the GYM environment before
 being returned to the agent
+* Policy- contains all the neural networks, QValues and policy gradient objects needed to optimise the agent 
 * Replay memory- stores all experiences currently undertaken by the agent and returns these in batches to optimise the agent's performance
 * Results handler- accepts all results given to the agent and plots these for the user in appropriate graphs as well as saving the final results to an Excel file
 * Optimal game parameters- stores all the parameters for each set game, which are used when training the agent for a given game, and verifies each parameter
