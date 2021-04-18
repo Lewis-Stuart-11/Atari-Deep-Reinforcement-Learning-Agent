@@ -51,6 +51,7 @@ def plot(info_per_episode, final):
     rewards_per_episode = [round(episode["total_reward"], 2) for episode in info_per_episode]
     total_time = [float(episode["total_time"]) for episode in info_per_episode]
     moving_average = [episode["moving_average"] for episode in info_per_episode]
+    epsilon = [float(episode["epsilon"])*100 for episode in info_per_episode]
 
     # Sets up main graph
     plt.figure(3)
@@ -71,6 +72,7 @@ def plot(info_per_episode, final):
     plt.plot(steps_per_episode, '-bx', label="Steps")
     plt.plot(rewards_per_episode, '-rx',  label="Rewards")
     plt.plot(total_time, '-gx',  label="Time")
+    plt.plot(epsilon, '-yx', label="Epsilon")
 
     # Plots moving averages
     plt.plot(moving_average, '-kx', label=f"Moving average (reward)")

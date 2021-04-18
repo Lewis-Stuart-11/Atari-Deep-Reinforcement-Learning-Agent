@@ -1,0 +1,114 @@
+{
+  "PongDeterministic-v4":
+      {
+        "0": {
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Advanced",
+              "epsilon_values": [1, 0.1, 0.01, 0.0008, 1e-05],
+              "discount": 0.99,
+              "learning_technique": "DQL",
+              "resize": [80, 60],
+              "crop_values": [[0.06, 0.94], [0.17, 0.92]],
+              "screen_process_type": "append",
+              "colour_type": "gray",
+              "prev_states_queue_size": 4,
+              "policy": "DQN_CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 620]},
+              "batch_size": 60,
+              "memory_size": 25000,
+              "target_update": 6,
+              "update_factor": 4,
+              "reward_scheme": {"use_given_reward": true, "lives_change_reward": 0, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
+            }
+      },
+  "BreakoutDeterministic-v4":
+      {
+        "0": {
+              "learning_rate": 2e-05,
+              "epsilon_strategy": "Epsilon Greedy Advanced",
+              "epsilon_values": [1, 0.1, 0.01, 0.0001, 1e-05],
+              "discount": 0.99,
+              "learning_technique": "DQL",
+              "resize": [84, 84],
+              "crop_values": [[0.05, 0.95], [0.45, 0.95]],
+              "screen_process_type": "morph",
+              "colour_type": "gray",
+              "prev_states_queue_size": 4,
+              "policy": "DQN_CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 620]},
+              "batch_size": 20,
+              "memory_size": 25000,
+              "target_update": 6,
+              "update_factor": 4,
+              "reward_scheme": {"use_given_reward": false, "lives_change_reward": -10, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
+          },
+        "1": {
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Advanced",
+              "epsilon_values": [1, 0.1, 0.01, 0.0001, 1e-05],
+              "discount": 0.99,
+              "learning_technique": "DQL",
+              "resize": [84, 84],
+              "crop_values": [[0.05, 0.95], [0.25, 0.95]],
+              "screen_process_type": "append",
+              "colour_type": "gray",
+              "prev_states_queue_size": 4,
+              "policy": "DQN_CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 620]},
+              "batch_size": 20,
+              "memory_size": 25000,
+              "target_update": 6,
+              "update_factor": 4,
+              "reward_scheme": {"use_given_reward": true, "lives_change_reward": -10, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
+          }
+      },
+  "MsPacmanDeterministic-v0":
+      {
+        "0": {
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Advanced",
+              "epsilon_values": [1, 0.1, 0.01, 0.0002, 5e-05],
+              "discount": 0.992,
+              "learning_technique": "DQL",
+              "resize": [130, 100],
+              "crop_values": [[0, 1], [0, 0.83]],
+              "screen_process_type": "standard",
+              "colour_type": "gray",
+              "prev_states_queue_size": 1,
+              "policy": "DQN_CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 620]},
+              "batch_size": 60,
+              "memory_size": 25000,
+              "target_update": 4,
+              "update_factor": 6,
+              "reward_scheme": {"use_given_reward": true, "lives_change_reward": -100, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
+        }
+      },
+  "CartPole-v0":
+      {
+        "0": {
+              "learning_rate": 0.001,
+              "epsilon_strategy": "Epsilon Greedy",
+              "epsilon_values": [1, 0.01, 0.01],
+              "discount": 0.999,
+              "learning_technique": "DQL",
+              "resize": [40, 90],
+              "crop_values": [[0, 1], [0.4, 0.8]],
+              "screen_process_type": "difference",
+              "colour_type": "rgb",
+              "prev_states_queue_size": 2,
+              "policy": "DQN_CNN",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [24, 32, 48]},
+              "batch_size": 250,
+              "memory_size": 100000,
+              "target_update": 10,
+              "update_factor": 10,
+              "reward_scheme": {"use_given_reward": true, "lives_change_reward": -10, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
+          }
+      }
+}

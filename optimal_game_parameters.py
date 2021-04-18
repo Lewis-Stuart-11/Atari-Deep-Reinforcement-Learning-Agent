@@ -1,6 +1,7 @@
 # Author Lewis Stuart 201262348
 
 from collections import namedtuple
+import json
 
 # Stores the optimal parameters for each available atari game
 OptimalParameters = namedtuple(
@@ -10,6 +11,7 @@ OptimalParameters = namedtuple(
      'epsilon_strategy', # The strategy for returning the epsilon values
      'epsilon_values',  # Exploration vs Exploration values
      'discount',  # How impactful future rewards are
+     'learning_technique',
      'resize',  # The final size of the screen to enter into the neural network
      'crop_values',  # Crop values to shrink down the size of the screen
      'screen_process_type',  # How the environment processes the screen
@@ -120,121 +122,53 @@ def validate_game_parameters(game_parameters: OptimalParameters):
         raise ValueError(f"Batch size must be between 10 and 10000")
 
     # Memory must be the correct size to avoid memory errors or not enough experiences being stored
-    if not (10000000 >= game_parameters.memory_size > 50):
-        raise ValueError(f"Replay memory size must be between 50 and 10,000,000")
+    if not (1000000 >= game_parameters.memory_size > 50):
+        raise ValueError(f"Replay memory size must be between 50 and 1,000,000")
 
     # The target update should be small enough that the policy and target networks update enough
     if not (100 >= game_parameters.target_update > 1):
         raise ValueError(f"Target update factor must be between 1 and 100")
 
+    # Iterates through the reward scheme settings and checks each one is of the correct type
+    bool_reward_types = ["use_given_reward", "one_life_game", "normalise_rewards", "end_on_negative"]
 
-# Optimal Pong parameters
-optimal_game_parameters["PongDeterministic-v4"] = OptimalParameters(
-    0.00005,
-    "Epsilon Greedy Advanced",
-    [1, 0.1, 0.01, 0.0008, 0.00001],
-    0.99,
-    [80, 60],
-    [[0.06, 0.94], [0.17, 0.92]],
-    "append",
-    "gray",
-    4,
-    'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
-    60,
-    25000,
-    6,
-    4,
-    {"use_given_reward": True, "lives_change_reward": 0, "one_life_game": False,
-     "normalise_rewards": False, "end_on_negative": False}
-)
+    for reward_type in bool_reward_types:
+        if reward_type in game_parameters.reward_scheme.keys():
+            if type(game_parameters.reward_scheme[reward_type]) is not bool:
+                raise ValueError(f"Reward scheme {reward_type} must be boolean")
+        else:
+            raise ValueError(f"Reward scheme: {reward_type} cannot be found")
 
-#Current episode: 4689
-#Reward: 340.0
+    float_types = ["lives_change_reward"]
 
-# Optimal Breakout parameters
-optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.00005,
-    "Epsilon Greedy Advanced",
-    [1, 0.1, 0.01, 0.0001, 0.00001],
-    0.99,
-    [84, 84],
-    [[0.05, 0.95], [0.45, 0.95]],
-    "append",
-    "gray",
-    4,
-    'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
-    20,
-    25000, #50000
-    6, # 10
-    4, # 5
-    {"use_given_reward": False, "lives_change_reward": -10, "one_life_game": False,
-     "normalise_rewards": False, "end_on_negative": False}
-)
+    for reward_type in float_types:
+        if reward_type in game_parameters.reward_scheme.keys():
+            if type(game_parameters.reward_scheme[reward_type]) is not float and \
+                    type(game_parameters.reward_scheme[reward_type]) is not int:
+                raise ValueError(f"Reward scheme {reward_type} must be int or float")
+        else:
+            raise ValueError(f"Reward scheme: {reward_type} cannot be found")
 
 
-"""
-# Optimal Breakout parameters
-optimal_game_parameters["BreakoutDeterministic-v4"] = OptimalParameters(
-    0.00005,
-    "Epsilon Greedy",
-    [1, 0.1, 0.0002], # 0.0005
-    0.99,
-    [84, 84],
-    [[0.05, 0.95], [0.25, 0.95]],
-    "append",
-    "gray",
-    4,
-    'DQN_CNN_Advanced',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [32, 64, 64, 620]},
-    20,
-    25000, #50000
-    6, # 10
-    4, # 5
-    {"use_given_reward": True, "lives_change_reward": -10, "one_life_game": False, "normalise_rewards": False}
-)
-"""
+def retrieve_game_parameters(atari_game: str, index: int):
+    with open("game_parameters.json", "r") as settings_json_file:
+        parameter_handler = json.load(settings_json_file)
 
+    parameter_list = parameter_handler[atari_game]
 
-# Optimal Pacman parameters
-optimal_game_parameters["MsPacmanDeterministic-v0"] = OptimalParameters(
-    0.00005,
-    "Epsilon Greedy Advanced",
-    [1, 0.1, 0.01, 0.0002, 0.00001],
-    0.992,
-    [130, 100],
-    [[0, 1], [0, 0.83]],
-    "standard",
-    "rgb",
-    1,
-    'DQN_CNN_Advanced',
-    {"kernel_sizes": [6, 3, 2], 'strides': [4, 2, 1], 'neurons_per_layer': [48, 84, 84, 1020]},
-    60,
-    25000,
-    4,
-    6,
-    {"use_given_reward": True, "lives_change_reward": -100, "one_life_game": False,
-     "normalise_rewards": False, "end_on_negative": False}
-)
+    if index >= len(parameter_list) or index < 0:
+        raise ValueError(f"Parameter index out of range, only {len(parameter_list)} parameter entries exist for the game {atari_game}")
 
-# Optimal Breakout parameters
-optimal_game_parameters["CartPole-v0"] = OptimalParameters(
-    0.001,
-    "Epsilon Greedy",
-    [1, 0.01, 0.01],
-    0.999,
-    [40, 90],
-    [[0, 1], [0.4, 0.8]],
-    "difference",
-    "rgb",
-    2,
-    'DQN_CNN',
-    {"kernel_sizes": [8, 4, 3], 'strides': [4, 2, 1], 'neurons_per_layer': [24, 32, 48]},
-    250,
-    100000,
-    10,
-    10,
-    {"use_given_reward": True, "lives_change_reward": -10, "one_life_game": False,
-     "normalise_rewards": False, "end_on_negative": False}
-)
+    dict_game_parameters = parameter_list[str(index)]
+
+    parameterConstructor = namedtuple('myNamedTuple', ' '.join(dict_game_parameters.keys()))
+    optimal_game_parameters = parameterConstructor(**dict_game_parameters)
+
+    # Checks to see if the parameters used are in a valid format
+
+    validate_game_parameters(optimal_game_parameters)
+
+    print("Successfully returned agent game parameters")
+
+    return optimal_game_parameters
+

@@ -21,7 +21,7 @@ class DQN(nn.Module):
     def __init__(self, img_height, img_width, num_actions):
         super().__init__()
 
-        # Two fully connected hidden layers- fully connected layers are known as 'linear' layers
+        # Three fully connected hidden layers- fully connected layers are known as 'linear' layers
         self.fc1 = nn.Linear(in_features=img_height*img_width*3, out_features=128)
         self.fc2 = nn.Linear(in_features=128, out_features=68)
         self.fc3 = nn.Linear(in_features=68, out_features=32)
@@ -187,6 +187,18 @@ class QValues():
         return values
 
     @staticmethod
+    def get_target_Q_Values(target_net, next_states, discount, rewards):
+
+        # Extracts next Q values of the best corresponding actions of the target network
+        # The target network is used for finding the next best actions
+        next_q_values = QValues.get_next(target_net, next_states)
+
+        # Uses formula E[reward + gamma * maxarg(next state)] to update Q values
+        target_q_values = (next_q_values * discount) + rewards
+
+        return target_q_values
+
+    @staticmethod
     def get_next_DDQN(policy_net, target_net, next_states):
         last_screens_of_state = next_states[:, -1, :, :]  # (B,H,W)
         final_state_locations = last_screens_of_state.flatten(start_dim=1).max(dim=1)[0].eq(0).type(torch.bool)
@@ -205,6 +217,14 @@ class QValues():
                                                                                              index=argmax_a.unsqueeze(
                                                                                                  -1)).squeeze(-1)
         return values
+
+
+class PolicyGradient():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    @staticmethod
+    def get_probabilities(target_net):
+        pass
 
 
 # An experience represents a transaction that the agent took and is what is used for training the network

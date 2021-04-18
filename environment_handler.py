@@ -220,10 +220,12 @@ class EnvironmentManager():
 
         self.current_screen = self.get_processed_screen()
 
+        discount = 0.7
+
         # Combines all states by adding all values together
-        morphed_states =  self.state_queue.pop(0)
-        for i in range(1, self.num_states):
-            morphed_states = torch.add(morphed_states,  self.state_queue[i])
+        morphed_states = self.state_queue.pop(0)
+        for i in range(0, self.num_states-1):
+            morphed_states = torch.add(morphed_states,  self.state_queue[i]) * (discount ** (i+1))
 
         self.state_queue.append(self.current_screen)
 
