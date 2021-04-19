@@ -22,6 +22,7 @@ How to run:
 	* Gym
 	* Atari_py
 	* Pandas
+	* Json
 	* Matplotlib
 	* Openpyxl
 	* Xlsxwriter
