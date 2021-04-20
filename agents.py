@@ -2,16 +2,18 @@
 
 import torch
 import random
-
+from torch.distributions import Bernoulli
+from torch.nn import Softmax
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
 
 
 # Handles what actions to take in the environment
 class Agent():
-    def __init__(self, strategy, num_actions):
+    def __init__(self, strategy, num_actions, learning_technique):
         # The strategy for choosing which action to take
         self.strategy = strategy
+        self.learning_technique = learning_technique
 
         # Number of actions of the current game
         self.num_actions = num_actions

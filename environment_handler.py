@@ -45,6 +45,8 @@ class EnvironmentManager():
         self.reward_scheme = {}
         self.establish_reward_scheme(custom_rewards)
 
+        self.is_first_action = True
+
     # Sets a default scheme unless a given reward scheme is passed
     def establish_reward_scheme(self, custom_rewards):
         default_scheme = {"lives_change_reward": 0, "one_life_game": False,
@@ -186,6 +188,7 @@ class EnvironmentManager():
 
         self.current_screen = self.get_processed_screen()
 
+
         # If the episode has finished, then the final screen should be all black
         if self.done:
             black_screen = torch.zeros_like(self.current_screen)
@@ -193,9 +196,8 @@ class EnvironmentManager():
         else:
             # Chooses last state in the queue and subtracts from the latest state in the queue
             oldest_queue_state = self.state_queue.pop(0)
-            current_state = self.state_queue[self.num_states-1]
             self.state_queue.append(self.current_screen)
-            return current_state - oldest_queue_state
+            return self.current_screen - oldest_queue_state
 
     # Returns the appended state, this involves appending each of the queues together to form a large
     # vertical image that is what is evaluated by the neural network
@@ -283,7 +285,7 @@ class EnvironmentManager():
         if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]))  # Resized to the size specified by the resize property
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)  # Resized to the size specified by the resize property
                 , T.ToTensor()  # Transformed to a tensor
             ])
 
@@ -291,7 +293,7 @@ class EnvironmentManager():
             # Use torchvision package to compose image transforms
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1])) # Resized to the size specified by the resize property
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR) # Resized to the size specified by the resize property
                 , T.Grayscale(num_output_channels=1) # Sets the image to grayscale
                 , T.ToTensor() # Transformed to a tensor
             ])
@@ -299,12 +301,14 @@ class EnvironmentManager():
         # Returns a tensor from the image composition
         resized_tensor = resize(screen).to(self.device)
 
+
         # Converts all colour values to either 0 or 1 (very costly as had to make custom operation to perform this)
         cut_off = 0.1
         if self.colour_type == "binary":
             for width in range(self.resize[0]):
                 for length in range(self.resize[1]):
                     resized_tensor[0, width, length] = 0 if resized_tensor[0, width, length] < cut_off else 1
+
 
         # An extra dimension is added as these will represent a batch of states
         batch_tensor = resized_tensor.unsqueeze(0).to(self.device)

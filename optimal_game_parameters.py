@@ -3,15 +3,15 @@
 from collections import namedtuple
 import json
 
-# Stores the optimal parameters for each available atari game
+# A template of the game parameters stored in the respective JSON file. Each of the features is explained below
 OptimalParameters = namedtuple(
     'OptimalParameters',
     (
+     'learning_technique', # Whether to use Policy gradient or Deep Q Learning
      'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
      'epsilon_strategy', # The strategy for returning the epsilon values
      'epsilon_values',  # Exploration vs Exploration values
      'discount',  # How impactful future rewards are
-     'learning_technique',
      'resize',  # The final size of the screen to enter into the neural network
      'crop_values',  # Crop values to shrink down the size of the screen
      'screen_process_type',  # How the environment processes the screen
@@ -21,6 +21,7 @@ OptimalParameters = namedtuple(
      'policy_parameters',  # The specific parameters for the selected policy (eg. Number of neurons)
      'batch_size',  # The number of batches to analyse per step
      'memory_size',  # How many experiences to save to memory
+     'memory_size_start', # The minimum memory size to start learning
      'target_update',  # How many episodes before the target neural network should be updated with the policy networks weights
      'update_factor',  # How many steps per episode before performing a batch weight update
      'reward_scheme'  # An dictionary of custom rewards for different situations
@@ -124,6 +125,11 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Memory must be the correct size to avoid memory errors or not enough experiences being stored
     if not (1000000 >= game_parameters.memory_size > 50):
         raise ValueError(f"Replay memory size must be between 50 and 1,000,000")
+
+    # Memory learning start size must be in between the max replay size and 0, this is because the replay memory will
+    # only return experiences once the amount memory is greater than this value
+    if game_parameters.memory_size_start > game_parameters.memory_size or game_parameters.memory_size_start < 0:
+        raise  ValueError(f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
 
     # The target update should be small enough that the policy and target networks update enough
     if not (100 >= game_parameters.target_update > 1):

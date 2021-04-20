@@ -9,6 +9,7 @@ from itertools import count
 import torch.optim as optim
 from torchviz import make_dot
 import json
+from torch.distributions import Bernoulli
 
 # Imports all policies that the agent can follow to achieve optimal actions
 from policies import *
@@ -45,7 +46,7 @@ game_FPS = 30
 actions_per_second = 15
 
 # Episodes to train
-num_training_episodes = 15000
+num_training_episodes = 10000
 
 # Updates the plot after so many episodes
 plot_update_episode_factor = 150
@@ -132,13 +133,14 @@ def extract_tensors(experiences):
 def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    deep_q_learning_methods = ["DQL", "DDQL"]
+    policy_gradient_methods = ["reinforce"]
+
     if not agent_parameters:
         raise ValueError("Agent parameters are not defined")
 
-    replay_start = 5000
-
     # Establishes the replay memory
-    memory = ReplayMemory(agent_parameters.memory_size, replay_start)
+    memory = ReplayMemory(agent_parameters.memory_size, agent_parameters.memory_size_start)
 
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
@@ -148,57 +150,72 @@ def train_Q_agent(em, agent):
 
     num_returned_states = 1
     if agent_parameters.screen_process_type == "append":
-        num_returned_states =agent_parameters.prev_states_queue_size
+        num_returned_states = agent_parameters.prev_states_queue_size
 
     if colour_type == "rgb":
         input_channels = 3 * num_returned_states
     else:
         input_channels = 1 * num_returned_states
 
+    learning_technique = agent_parameters.learning_technique
+
     # Uses a deep neural network (without convolution layers)
     if agent_parameters.policy == "DQN":
         # Sets up input sizes for the networks
-        policy_net = DQN(screen_height, screen_width, em.num_actions_available()).to(device)
+        policy_net = DQN(screen_height, screen_width, em.num_actions_available(),
+                         learning_technique).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        target_net = DQN(screen_height, screen_width, em.num_actions_available()).to(device)
+        if learning_technique in deep_q_learning_methods:
+            target_net = DQN(screen_height, screen_width, em.num_actions_available(),
+                             learning_technique).to(device)
 
     # Uses a deep neural network (with convolution layers)
     elif agent_parameters.policy == "DQN_CNN_Basic":
         # Establishes Policy and Target networks
         policy_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
-                                   agent_parameters.policy_parameters).to(device)
+                                   agent_parameters.policy_parameters, learning_technique).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
-                                   agent_parameters.policy_parameters).to(device)
+        if learning_technique in deep_q_learning_methods:
+            target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
+                                       agent_parameters.policy_parameters, learning_technique).to(device)
 
     elif agent_parameters.policy == "DQN_CNN_Advanced":
         policy_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
                                       em.num_actions_available(), input_channels,
-                                      agent_parameters.policy_parameters).to(device)
+                                      agent_parameters.policy_parameters, learning_technique).to(device)
 
         policy_net.apply(initialise_weights)
 
-        target_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
-                                      em.num_actions_available(), input_channels,
-                                      agent_parameters.policy_parameters).to(device)
+        if learning_technique in deep_q_learning_methods:
+            target_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
+                                          em.num_actions_available(), input_channels,
+                                          agent_parameters.policy_parameters, learning_technique).to(device)
 
     else:
         raise Exception("Policy and target networks not established")
 
-    # Sets the weights and biases to be the same for both networks
-    target_net.load_state_dict(policy_net.state_dict())
+    if learning_technique in deep_q_learning_methods:
+        # Sets the weights and biases to be the same for both networks
+        target_net.load_state_dict(policy_net.state_dict())
 
-    # Sets the network to not be in training mode (only be used for inference)
-    target_net.eval()
+        # Sets the network to not be in training mode (only be used for inference)
+        target_net.eval()
 
-    # Sets and optimiser with the values to optimised as the parameters of the policy network, with the learning rate
-    optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
+        # Sets and optimiser with the values to optimised as the parameters of the policy network, with the learning rate
+        optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
+
+    elif learning_technique in policy_gradient_methods:
+        target_net = None
+
+        optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
+    else:
+        raise ValueError("Learning technique not defined")
 
     # Number of states in a batch
     batch_size = agent_parameters.batch_size
@@ -209,7 +226,7 @@ def train_Q_agent(em, agent):
     # Stores episode durations
     episode_durations = []
 
-    # Stores the index and reward of the best episode that occured
+    # Stores the index and reward of the best episode that occurred
     best_episode_index = (0, 0)
 
     # Creates a visual representation of the neural network and saves it as 'Policy Network diagram'
@@ -217,7 +234,10 @@ def train_Q_agent(em, agent):
         print("Creating neural network diagram")
         returned_values = policy_net(em.get_state())
         make_dot(returned_values,
-                 params=dict(list(policy_net.named_parameters()))).render("Policy Network diagram", format="png")
+                 params=dict(list(policy_net.named_parameters()))).render("results/Policy_Network_diagram", format="png")
+
+        # Remove extra unnecessary created config file
+        os.remove("results/Policy_Network_diagram")
 
     # Iterates over each episode
     for episode in range(num_training_episodes):
@@ -256,7 +276,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if (step % 10) == 0 and show_processed_screens:
+            if (step % 40) == 0 and show_processed_screens:
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -272,25 +292,24 @@ def train_Q_agent(em, agent):
             if render_agent_factor and episode > render_agent_factor:
                 em.render()
 
-            # Retrieves a sample if possible and assigns this to the variable 'Experiences'
-            if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
+            # Retrieves a sample if possible to learn from if deep q learning is used
+            if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0 \
+                    and (learning_technique in deep_q_learning_methods):
                 experiences = memory.sample(batch_size)
 
                 # Extracts all states, actions, reward and next states into their own tensors
                 states, actions, rewards, next_states = extract_tensors(experiences)
 
-                # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
-                current_q_values = QValues.get_current(policy_net, states, actions)
-
-                # next_q_values = QValues.get_next_DDQN(target_net, target_net, next_states)
-
-                target_q_values = QValues.get_target_Q_Values(target_net, next_states, agent_parameters.discount,
-                                                              rewards)
-
                 # Sets the all gradients of all the weights and biases in the policy network to 0
                 # As pytorch accumulates gradients every time it is used, it needs to be reset as to not
                 # Factor in old gradients and biases
                 optimizer.zero_grad()
+
+                # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
+                current_q_values = QValues.get_current(policy_net, states, actions)
+
+                target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states, agent_parameters.discount,
+                                                                  rewards, learning_technique)
 
                 # Calculates loss between the current Q values and the target Q values by using the
                 # mean squared error as the loss function
@@ -304,8 +323,34 @@ def train_Q_agent(em, agent):
 
             # Checks if the episode has finished
             if em.done:
+                improve_episode_factor = 1
 
-                # Statistic data is recorded
+                # Performs optimisation if the method is policy gradient
+                if learning_technique in policy_gradient_methods and episode % improve_episode_factor == 0:
+                    experiences = memory.return_all_and_clear_memory()
+
+                    states, actions, rewards, next_states = extract_tensors(experiences)
+
+                    optimizer.zero_grad()
+
+                    numpy_rewards = np.array(rewards.cpu())
+
+                    discounted_rewards = np.array([float(agent_parameters.discount ** i * rewards[i])
+                                  for i in range(len(numpy_rewards))])
+
+                    discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
+
+                    rewards = torch.from_numpy(discounted_rewards).to(device)
+
+                    logprob = torch.log(policy_net(states))
+                    selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
+                    loss = -selected_logprobs.mean()
+
+                    loss.backward()
+
+                    optimizer.step()
+
+                # Time taken is recorded
                 total_time = str(time.time() - start)
 
                 # Finds the 50 episode moving average
@@ -366,6 +411,8 @@ def train_Q_agent(em, agent):
                 # Draws graph depending on the plot update factor
                 if (episode + 1) % plot_update_episode_factor == 0:
                     # Appends the number of steps
+                    print("Creating graph plots")
+                    print()
                     plot(episode_durations, False)
 
                 # Episode is finished and breaks
@@ -373,18 +420,21 @@ def train_Q_agent(em, agent):
 
         # Checks to see if the target network needs updating by checking if the episode count is
         # a multiple of the target_update value
-        if episode % agent_parameters.target_update == 0:
+        if episode % agent_parameters.target_update == 0 and agent_parameters.learning_technique in deep_q_learning_methods:
             target_net.load_state_dict(policy_net.state_dict())
 
         # Saves the current neural network weights depending on the save factor
         if episode % save_target_network_factor == 0:
-            torch.save(target_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_{episode}")
+            torch.save(policy_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_{episode}")
 
+    print()
+    print("Creating and saving final graph plots")
+    print()
     # Plots performance before closing
     plot(episode_durations, True)
 
     # Writes data to excel file
-    write_final_results(episode_durations, running_atari_game, num_training_episodes)
+    write_final_results(episode_durations, running_atari_game, num_training_episodes, agent_parameters)
 
     # Closes environment
     em.close()
@@ -479,6 +529,9 @@ def print_agent_information(em):
     # Outputs action and state space
     print(f"Action Space {em.env.action_space}")
     print(f"State Space {em.env.observation_space}")
+    print()
+
+    print(f"Learning technique: {agent_parameters.learning_technique}")
     print()
 
     # Parameters for how the agent is trained
@@ -689,7 +742,7 @@ def main(arguements):
             raise ValueError("Could not find appropriate epsilon strategy")
 
         # Agent is created
-        agent = Agent(strategy, em.num_actions_available())
+        agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique)
 
         # print(f"All atari games: {em.return_avaliable_atari_games()}")
 

@@ -6,6 +6,7 @@ import random
 from collections import namedtuple
 import torch
 import numpy as np
+from torch.nn import Softmax
 
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
@@ -18,8 +19,10 @@ random.seed(0)
 
 # A normal deep QNetwork, takes in the image sizes and uses these as the inputs to the neural network
 class DQN(nn.Module):
-    def __init__(self, img_height, img_width, num_actions):
+    def __init__(self, img_height, img_width, num_actions, learning_technique):
         super().__init__()
+
+        self.learning_technique = learning_technique
 
         # Three fully connected hidden layers- fully connected layers are known as 'linear' layers
         self.fc1 = nn.Linear(in_features=img_height*img_width*3, out_features=128)
@@ -28,6 +31,7 @@ class DQN(nn.Module):
 
         # One output layer (avaliable actions)
         self.out = nn.Linear(in_features=32, out_features=num_actions)
+
 
     # A forward pass through the network with an image sensor T
     def forward(self, t):
@@ -38,14 +42,18 @@ class DQN(nn.Module):
         t = F.relu(self.fc1(t))
         t = F.relu(self.fc2(t))
         t = F.relu(self.fc3(t))
+        if self.learning_technique in ["reinforce"]:
+            t = F.softmax(t, 1)
         t = self.out(t)
         return t
 
 
 # A deep neural network with convoluted layers to process the image
 class DQN_CNN_Basic(nn.Module):
-    def __init__(self, h, w, outputs, input_channels,  nn_structure: dict):
+    def __init__(self, h, w, outputs, input_channels,  nn_structure: dict, learning_technique):
         super(DQN_CNN_Basic, self).__init__()
+
+        self.learning_technique = learning_technique
 
         # Properties for how the convoluted neural network
         kernel_sizes = nn_structure["kernel_sizes"]
@@ -85,12 +93,14 @@ class DQN_CNN_Basic(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
+        if self.learning_technique in ["reinforce"]:
+            x = F.softmax(x, -1)
         return self.head(x.view(x.size(0), -1))
 
 
 # More complex CNN with multiple linear layers
 class DQN_CNN_Advanced(nn.Module):
-    def __init__(self, h, w, outputs, input_channels, nn_structure: dict):
+    def __init__(self, h, w, outputs, input_channels, nn_structure: dict, learning_technique):
         super().__init__()
 
         kernel_sizes = nn_structure["kernel_sizes"]
@@ -117,10 +127,19 @@ class DQN_CNN_Advanced(nn.Module):
         # Head input size
         linear_input_size = convw * convh * neurons_per_layer[2]
 
-        self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
-                                        nn.ReLU(True),
-                                        nn.Linear(neurons_per_layer[3], outputs)
-                                        )
+        if learning_technique in ["DQL", "DDQL"]:
+            self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
+                                            nn.ReLU(True),
+                                            nn.Linear(neurons_per_layer[3], outputs)
+                                            )
+        elif learning_technique in ["reinforce"]:
+            self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
+                                            nn.ReLU(True),
+                                            nn.Linear(neurons_per_layer[3], outputs),
+                                            nn.Softmax(dim=-1)
+                                            )
+        else:
+            raise ValueError("Learning technique undefined")
 
     def forward(self, x):
         x = self.cnn(x)
@@ -187,11 +206,16 @@ class QValues():
         return values
 
     @staticmethod
-    def get_target_Q_Values(target_net, next_states, discount, rewards):
+    def get_target_Q_Values(policy_net, target_net, next_states, discount, rewards, learning_technique):
 
         # Extracts next Q values of the best corresponding actions of the target network
         # The target network is used for finding the next best actions
-        next_q_values = QValues.get_next(target_net, next_states)
+        if learning_technique == "DQL":
+            next_q_values = QValues.get_next(target_net, next_states)
+        elif learning_technique == "DDQL":
+            next_q_values = QValues.get_next_DDQN(policy_net, target_net, next_states)
+        else:
+            raise ValueError("Learning technique not defined")
 
         # Uses formula E[reward + gamma * maxarg(next state)] to update Q values
         target_q_values = (next_q_values * discount) + rewards
@@ -223,8 +247,11 @@ class PolicyGradient():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     @staticmethod
-    def get_probabilities(target_net):
-        pass
+    def get_reinforce_loss(policy_net, states, actions, rewards):
+        logprob = torch.log(policy_net.predict(states))
+        selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
+        return -selected_logprobs.mean()
+
 
 
 # An experience represents a transaction that the agent took and is what is used for training the network
@@ -264,3 +291,8 @@ class ReplayMemory():
 
     def current_memory_size(self):
         return len(self.memory)
+
+    def return_all_and_clear_memory(self):
+        all_memory = self.memory
+        self.memory = []
+        return all_memory
