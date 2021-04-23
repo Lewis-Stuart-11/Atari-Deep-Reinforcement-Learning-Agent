@@ -52,7 +52,7 @@ num_training_episodes = 10000
 plot_update_episode_factor = 150
 
 # How many times to save the current agent progress (saves neural network weights)
-save_target_network_factor = 200
+save_policy_network_factor = 200
 
 # Render's the agent performing the eps after a certain number of episodes
 render_agent_factor = 1
@@ -81,7 +81,7 @@ agent_parameters = None
 
 def load_settings():
     global running_atari_game, num_training_episodes, use_menu, show_processed_screens, show_neural_net, \
-        test_agent_file,  plot_update_episode_factor, save_target_network_factor, render_agent_factor, parameter_index
+        test_agent_file, plot_update_episode_factor, save_policy_network_factor, render_agent_factor, parameter_index
 
     with open("settings.json", "r") as settings_json_file:
         try:
@@ -89,7 +89,7 @@ def load_settings():
             running_atari_game = settings["running_atari_game"]
             num_training_episodes = settings["num_training_episodes"]
             plot_update_episode_factor = settings["plot_update_episode_factor"]
-            save_target_network_factor = settings["save_target_network_factor"]
+            save_policy_network_factor = settings["save_policy_network_factor"]
             render_agent_factor = settings["render_agent_factor"]
             use_menu = settings["use_menu"]
             show_processed_screens = settings["show_processed_screens"]
@@ -101,6 +101,7 @@ def load_settings():
             print("WARNING: Failed to load settings- using default settings")
         else:
             print("Successfully loaded in settings")
+
 
 # Creates a graph of a state screen
 def display_processed_screens(next_state_screen, state_screen_cmap, step):
@@ -234,7 +235,8 @@ def train_Q_agent(em, agent):
         print("Creating neural network diagram")
         returned_values = policy_net(em.get_state())
         make_dot(returned_values,
-                 params=dict(list(policy_net.named_parameters()))).render("results/Policy_Network_diagram", format="png")
+                 params=dict(list(policy_net.named_parameters()))).render("results/Policy_Network_diagram",
+                                                                          format="png")
 
         # Remove extra unnecessary created config file
         os.remove("results/Policy_Network_diagram")
@@ -257,7 +259,7 @@ def train_Q_agent(em, agent):
         for step in count():
 
             # Returns action
-            action = agent.select_action(state, policy_net, episode)
+            action = agent.select_action(state, policy_net, episode, episode_reward)
 
             # Returns reward
             env_reward, custom_reward = em.take_action(action)
@@ -276,7 +278,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if (step % 40) == 0 and show_processed_screens:
+            if (step % 60) == 0 and show_processed_screens:
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -308,8 +310,9 @@ def train_Q_agent(em, agent):
                 # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
                 current_q_values = QValues.get_current(policy_net, states, actions)
 
-                target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states, agent_parameters.discount,
-                                                                  rewards, learning_technique)
+                target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states,
+                                                              agent_parameters.discount,
+                                                              rewards, learning_technique)
 
                 # Calculates loss between the current Q values and the target Q values by using the
                 # mean squared error as the loss function
@@ -327,24 +330,48 @@ def train_Q_agent(em, agent):
 
                 # Performs optimisation if the method is policy gradient
                 if learning_technique in policy_gradient_methods and episode % improve_episode_factor == 0:
+                    # Returns all the experiences from memory
                     experiences = memory.return_all_and_clear_memory()
 
                     states, actions, rewards, next_states = extract_tensors(experiences)
 
                     optimizer.zero_grad()
 
+                    # Returns rewards as a numpy array
                     numpy_rewards = np.array(rewards.cpu())
 
+                    # Calculates the associated rewards with the discount factor
                     discounted_rewards = np.array([float(agent_parameters.discount ** i * rewards[i])
-                                  for i in range(len(numpy_rewards))])
+                                                   for i in range(len(numpy_rewards))])
 
+                    # Finds the cumulative rewards in a given episode
                     discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
 
+                    # Returns rewards as a tensor
                     rewards = torch.from_numpy(discounted_rewards).to(device)
 
+                    print("Final rewards")
+                    print(rewards)
+                    print()
+
+                    # Deduces the loss for the policy gradient
                     logprob = torch.log(policy_net(states))
+
+                    print("Log probabilities")
+                    print(logprob)
+                    print()
+
                     selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
+
+                    print("Selected log probs")
+                    print(selected_logprobs)
+                    print()
+
                     loss = -selected_logprobs.mean()
+
+                    print("loss")
+                    print(loss)
+                    print()
 
                     loss.backward()
 
@@ -381,7 +408,10 @@ def train_Q_agent(em, agent):
                     print(f"Moving_average: {prev_rewards}")
                     print(f"Current epsilon: {round(agent.return_exploration_rate(episode), 3)}")
                     print(f"Time: {total_time[0:total_time.find('.') + 3]}")
-                    print(f"Training: {memory.can_provide_sample(batch_size)}")
+                    if learning_technique in deep_q_learning_methods:
+                        print(f"Training: {memory.can_provide_sample(batch_size)}")
+                    else:
+                        print("Training: True")
                     print()
 
                     # Updates the best episode if the reward was greater than the current best episode
@@ -424,12 +454,13 @@ def train_Q_agent(em, agent):
             target_net.load_state_dict(policy_net.state_dict())
 
         # Saves the current neural network weights depending on the save factor
-        if episode % save_target_network_factor == 0:
+        if episode % save_policy_network_factor == 0:
             torch.save(policy_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_{episode}")
 
     print()
     print("Creating and saving final graph plots")
     print()
+
     # Plots performance before closing
     plot(episode_durations, True)
 
@@ -550,10 +581,9 @@ def print_agent_information(em):
 
     # Parameters for how choices are made
     print("Epsilon values: ")
-    print(f"\t-Start: {agent_parameters.epsilon_values[0]}")
-    print(f"\t-Decay: {agent_parameters.epsilon_values[2]}")
-    print(f"\t-End: {agent_parameters.epsilon_values[1]}")
-
+    print(f"\t-Start: {agent_parameters.epsilon_values['start']}")
+    print(f"\t-Decay: {agent_parameters.epsilon_values['decay_linear']}")
+    print(f"\t-End: {agent_parameters.epsilon_values['end']}")
     print()
 
     # Screen values for how the agent views the environment
@@ -725,26 +755,33 @@ def main(arguements):
         play_type = 0
         train = True
 
-
     try:
         em = return_env_with_atari_game(running_atari_game)
 
         # Action strategy is set
         episilon_values = agent_parameters.epsilon_values
 
-        if agent_parameters.epsilon_strategy.lower() == "epsilon greedy":
-            strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
+        if agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear":
+            strategy = EpsilonGreedyStrategy(episilon_values["start"], episilon_values["end"],
+                                             episilon_values["linear_decay"])
 
-        elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy advanced":
-            strategy = EpsilonGreedyStrategyAdvanced(episilon_values[0], episilon_values[1], episilon_values[2],
-                                                     episilon_values[3], episilon_values[4])
+        elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear advanced":
+            strategy = EpsilonGreedyStrategyAdvanced(episilon_values["start"], episilon_values["middle"],
+                                                     episilon_values["end"], episilon_values["decay_linear"],
+                                                     episilon_values["end_decay_linear"])
+
+        elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy reward":
+            strategy = EpsilonGreedyRewardStrategy(episilon_values["start"], episilon_values["end"],
+                                                   episilon_values["decay_linear"],
+                                                   episilon_values["reward_incrementation"],
+                                                   episilon_values["reward_target"],
+                                                   episilon_values["reward_decay"])
+
         else:
             raise ValueError("Could not find appropriate epsilon strategy")
 
         # Agent is created
-        agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique)
-
-        # print(f"All atari games: {em.return_avaliable_atari_games()}")
+        agent = Agent(strategy, em.num_actions_available())
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")

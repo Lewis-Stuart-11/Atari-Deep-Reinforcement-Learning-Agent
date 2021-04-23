@@ -10,20 +10,19 @@ random.seed(0)
 
 # Handles what actions to take in the environment
 class Agent():
-    def __init__(self, strategy, num_actions, learning_technique):
+    def __init__(self, strategy, num_actions):
         # The strategy for choosing which action to take
         self.strategy = strategy
-        self.learning_technique = learning_technique
 
         # Number of actions of the current game
         self.num_actions = num_actions
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Chooses the new action to take for the agent
-    def select_action(self, state, policy_net, episode):
+    def select_action(self, state, policy_net, episode, reward):
 
-        # Returns the current exploration rate for the episode
-        rate = self.strategy.get_exploration_rate(episode)
+        rate = self.strategy.get_exploration_rate(episode, reward) if self.strategy.use_reward else \
+            self.strategy.get_exploration_rate(episode)
 
         # Chooses a random action if agent decides to explore
         if rate > random.random():
@@ -49,4 +48,7 @@ class Agent():
 
     # Returns the current exploration rate
     def return_exploration_rate(self, episode):
-        return self.strategy.get_exploration_rate(episode)
+        if self.strategy.use_reward:
+            return self.strategy.get_exploration_rate(episode, 0)
+        else:
+            return self.strategy.get_exploration_rate(episode)

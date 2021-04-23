@@ -10,6 +10,7 @@ import math
 # Ensures that the results will be the same (same starting random seed each time)
 np.random.seed(0)
 
+
 # Handles the gym environment and all properties regarding game states
 class EnvironmentManager():
     def __init__(self, game, crop_factors, resize, screen_process_type,
@@ -22,10 +23,12 @@ class EnvironmentManager():
         self.env = gym.make(game).unwrapped
         self.env.seed(0)
         self.env.reset()
-        self.done = False # Episode has not finished
+        self.done = False  # Episode has not finished
         self.state_info = None
         self.colour_type = colour_type
         self.current_screen = None
+
+        self.current_game = game
 
         # The state return format
         self.screen_process_type = screen_process_type.lower().strip()
@@ -152,7 +155,7 @@ class EnvironmentManager():
         # If normalise rewards is set, then every reward will always be 1 or -1
         if self.reward_scheme["normalise_rewards"]:
             if final_reward != 0:
-                final_reward = math.copysign(1, final_reward) # Returns -1 or 1
+                final_reward = math.copysign(1, final_reward)  # Returns -1 or 1
 
         self.is_first_action = False
 
@@ -187,7 +190,6 @@ class EnvironmentManager():
     def get_difference_state(self):
 
         self.current_screen = self.get_processed_screen()
-
 
         # If the episode has finished, then the final screen should be all black
         if self.done:
@@ -226,8 +228,8 @@ class EnvironmentManager():
 
         # Combines all states by adding all values together
         morphed_states = self.state_queue.pop(0)
-        for i in range(0, self.num_states-1):
-            morphed_states = torch.add(morphed_states,  self.state_queue[i]) * (discount ** (i+1))
+        for i in range(0, self.num_states - 1):
+            morphed_states = torch.add(morphed_states, self.state_queue[i]) * (discount ** (i + 1))
 
         self.state_queue.append(self.current_screen)
 
@@ -245,6 +247,12 @@ class EnvironmentManager():
     def get_screen_width(self):
         screen = self.get_state()
         return screen.shape[3]
+
+    def return_custom_screen(self, screen):
+        if self.current_game == "MsPacmanDeterministic-v0":
+            return self.pac_man_state_converter(screen)
+        else:
+            return screen
 
     # Returns the screen after it has been processed
     def get_processed_screen(self):
@@ -279,13 +287,18 @@ class EnvironmentManager():
     def transform_screen_data(self, screen):
         # Converts screen to a continuous array of float values and rescales by dividing by 255
         screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
+
+        # Returns custom screen for each game
+        screen = self.return_custom_screen(screen)
+
         # Converts screen to a tensor
         screen = torch.from_numpy(screen)
 
         if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)  # Resized to the size specified by the resize property
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)
+                # Resized to the size specified by the resize property
                 , T.ToTensor()  # Transformed to a tensor
             ])
 
@@ -293,14 +306,16 @@ class EnvironmentManager():
             # Use torchvision package to compose image transforms
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR) # Resized to the size specified by the resize property
-                , T.Grayscale(num_output_channels=1) # Sets the image to grayscale
-                , T.ToTensor() # Transformed to a tensor
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)
+                # Resized to the size specified by the resize property
+                , T.Grayscale(num_output_channels=1)  # Sets the image to grayscale
+                , T.ToTensor()  # Transformed to a tensor
             ])
 
         # Returns a tensor from the image composition
-        resized_tensor = resize(screen).to(self.device)
+        # resized_tensor = resize(screen).to(self.device)
 
+        resized_tensor = resize(screen).to(self.device)
 
         # Converts all colour values to either 0 or 1 (very costly as had to make custom operation to perform this)
         cut_off = 0.1
@@ -309,9 +324,49 @@ class EnvironmentManager():
                 for length in range(self.resize[1]):
                     resized_tensor[0, width, length] = 0 if resized_tensor[0, width, length] < cut_off else 1
 
-
         # An extra dimension is added as these will represent a batch of states
         batch_tensor = resized_tensor.unsqueeze(0).to(self.device)
 
         return batch_tensor
 
+    # Accepts Numpy array and returns normalised pacman state
+    @staticmethod
+    def pac_man_state_converter(screen):
+        screen_shape = screen.shape
+
+        # All RGB values are summed together, giving a colour dimension of size 1
+        summed_array = screen.sum(axis=0)
+
+        # Array is converted into a single dimension
+        resized_numpy = summed_array.reshape(-1)
+
+        # As the colour scheme is relatively simple, each component of the pacman game has a specific RGB value
+        # and when these values are summed together, each pixel has a unique float value between (0-3). Hence,
+        # a series of conditions are employed which extract the specific components and store them in individual
+        # arrays, which relate to the RGB arrays. The benefit of this is that all the ghosts can be expressed
+        # through the red dimension by setting that all pixels between certain values (the summed RGB values
+        # of the ghosts) are stored in the red array. This is also done for the pacman sprite as well as all
+        # the points and walls in the game
+
+        # Ghosts array
+        red_array = np.where(((resized_numpy > 1.2) & (resized_numpy <= 1.74) |
+                              ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.0)
+
+        # Pacman array
+        green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.0)
+
+        # Points and walls array
+        blue_array = np.where((resized_numpy > 1.76) & (resized_numpy <= 1.8), 1.0, 0.0)
+
+        # Arrays are reshaped back to the original dimensions
+        red_array = red_array.reshape(1, screen_shape[1], screen_shape[2])
+        green_array = green_array.reshape(1, screen_shape[1], screen_shape[2])
+        blue_array = blue_array.reshape(1, screen_shape[1], screen_shape[2])
+
+        # Arrays are combined together to form the final screen image
+        final_array = np.concatenate((red_array, green_array, blue_array), axis=0)
+
+        # Image is reshaped to form the same dimensions as the normal screen
+        final_array = final_array.reshape(screen_shape[0], screen_shape[1], screen_shape[2])
+
+        return final_array

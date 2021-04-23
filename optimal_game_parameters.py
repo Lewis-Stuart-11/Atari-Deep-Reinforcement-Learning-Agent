@@ -7,25 +7,25 @@ import json
 OptimalParameters = namedtuple(
     'OptimalParameters',
     (
-     'learning_technique', # Whether to use Policy gradient or Deep Q Learning
-     'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
-     'epsilon_strategy', # The strategy for returning the epsilon values
-     'epsilon_values',  # Exploration vs Exploration values
-     'discount',  # How impactful future rewards are
-     'resize',  # The final size of the screen to enter into the neural network
-     'crop_values',  # Crop values to shrink down the size of the screen
-     'screen_process_type',  # How the environment processes the screen
-     'colour_type',  # Depicts how the screen should be processed with colour
-     'prev_states_queue_size',  # How many states to store in the queue for returning the analysed state
-     'policy',  # Chooses which policy to use (eg. DQN)
-     'policy_parameters',  # The specific parameters for the selected policy (eg. Number of neurons)
-     'batch_size',  # The number of batches to analyse per step
-     'memory_size',  # How many experiences to save to memory
-     'memory_size_start', # The minimum memory size to start learning
-     'target_update',  # How many episodes before the target neural network should be updated with the policy networks weights
-     'update_factor',  # How many steps per episode before performing a batch weight update
-     'reward_scheme'  # An dictionary of custom rewards for different situations
-     )
+        'learning_technique',  # Whether to use Policy gradient or Deep Q Learning
+        'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
+        'epsilon_strategy',  # The strategy for returning the epsilon values
+        'epsilon_values',  # Exploration vs Exploration values
+        'discount',  # How impactful future rewards are
+        'resize',  # The final size of the screen to enter into the neural network
+        'crop_values',  # Crop values to shrink down the size of the screen
+        'screen_process_type',  # How the environment processes the screen
+        'colour_type',  # Depicts how the screen should be processed with colour
+        'prev_states_queue_size',  # How many states to store in the queue for returning the analysed state
+        'policy',  # Chooses which policy to use (eg. DQN)
+        'policy_parameters',  # The specific parameters for the selected policy (eg. Number of neurons)
+        'batch_size',  # The number of batches to analyse per step
+        'memory_size',  # How many experiences to save to memory
+        'memory_size_start',  # The minimum memory size to start learning
+        'target_update', # How many episodes before the target neural network should be updated with the policy networks weights
+        'update_factor',  # How many steps per episode before performing a batch weight update
+        'reward_scheme'  # An dictionary of custom rewards for different situations
+    )
 )
 
 # Holds all the optimal parameters for all the available Atari games
@@ -43,23 +43,32 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
     available_screen_processing_types = ["append", "difference", "standard", "morph"]
 
-    available_strategies = ["epsilon greedy", "epsilon greedy advanced"]
+    available_strategies = {"epsilon greedy linear": ["start", "end", "decay_linear"],
+                            "epsilon greedy linear advanced": ["start", "middle", "end", "decay_linear",
+                                                               "end_decay_linear"],
+                            "epsilon greedy reward": ["start", "end", "decay_linear", "reward_incrementation",
+                                                      "reward_target", "reward_decay"]}
 
     # Learning rate must be between 1-0
-    if not(1 >= game_parameters.learning_rate > 0):
+    if not (1 >= game_parameters.learning_rate > 0):
         raise ValueError(f"Learning rate must be between 1 and 0")
 
     # Epsilon strategy must be valid
-    if game_parameters.epsilon_strategy.lower() not in available_strategies:
-        raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies} ")
+    if game_parameters.epsilon_strategy.lower() not in available_strategies.keys():
+        raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies.keys()} ")
 
-    # Each epsilon value must be between 1-0 to be valid
-    for value in game_parameters.epsilon_values:
-        if not(1 >= value > 0):
-            raise ValueError(f"Epsilon values must be between 1 and 0")
+    for epsilon_property in available_strategies[game_parameters.epsilon_strategy.lower()]:
+        if epsilon_property not in game_parameters.epsilon_values.keys():
+            raise ValueError(f"Epsilon strategy '{game_parameters.epsilon_strategy}' "
+                             f"must include property: {epsilon_property}")
+
+        if epsilon_property not in ["reward_target", "reward_incrementation"] \
+                and not (0 <= int(game_parameters.epsilon_values[epsilon_property]) <= 1):
+            raise ValueError(f"Epsilon value {epsilon_property} must be between 1-0")
+
 
     # Discount must be between 1 and 0 to be valid
-    if not(1 >= game_parameters.discount > 0):
+    if not (1 >= game_parameters.discount > 0):
         raise ValueError(f"Discount value must be between 1 and 0")
 
     # The resized image must have a width and height size
@@ -81,17 +90,19 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # bottom values, otherwise this will result in indexing errors
     for dimension in game_parameters.crop_values:
         if dimension[0] > dimension[1]:
-            raise ValueError(f"Left/Top crop value ({dimension[0]}) cannot be larger than Right/Bottom crop value {dimension[1]}")
-        if not(1 >= dimension[0] >= 0) or not(1 >= dimension[1] >= 0):
+            raise ValueError(
+                f"Left/Top crop value ({dimension[0]}) cannot be larger than Right/Bottom crop value {dimension[1]}")
+        if not (1 >= dimension[0] >= 0) or not (1 >= dimension[1] >= 0):
             raise ValueError(f"Crop values must be between 0-1")
 
     # Processing type must be supported
     if game_parameters.screen_process_type not in available_screen_processing_types:
-        raise ValueError(f"Screen processing type {game_parameters.screen_process_type} must either: {available_screen_processing_types}")
+        raise ValueError(
+            f"Screen processing type {game_parameters.screen_process_type} must either: {available_screen_processing_types}")
 
     # The state queue must be between 1 and 10; 10 would be too large and not feasible to manage, while less than 1
     # would mean that no state is saved to the queue (as it would not exist)
-    if not(10 >= game_parameters.prev_states_queue_size >= 1):
+    if not (10 >= game_parameters.prev_states_queue_size >= 1):
         raise ValueError(f"State queue size must be between 10-1")
 
     # Colour type must be supported
@@ -129,7 +140,8 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Memory learning start size must be in between the max replay size and 0, this is because the replay memory will
     # only return experiences once the amount memory is greater than this value
     if game_parameters.memory_size_start > game_parameters.memory_size or game_parameters.memory_size_start < 0:
-        raise  ValueError(f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
+        raise ValueError(
+            f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
 
     # The target update should be small enough that the policy and target networks update enough
     if not (100 >= game_parameters.target_update > 1):
@@ -163,18 +175,17 @@ def retrieve_game_parameters(atari_game: str, index: int):
     parameter_list = parameter_handler[atari_game]
 
     if index >= len(parameter_list) or index < 0:
-        raise ValueError(f"Parameter index out of range, only {len(parameter_list)} parameter entries exist for the game {atari_game}")
+        raise ValueError(
+            f"Parameter index out of range, only {len(parameter_list)} parameter entries exist for the game {atari_game}")
 
     dict_game_parameters = parameter_list[str(index)]
 
-    parameterConstructor = namedtuple('myNamedTuple', ' '.join(dict_game_parameters.keys()))
+    parameterConstructor = namedtuple('Game_Parameter_Tuple', ' '.join(dict_game_parameters.keys()))
     optimal_game_parameters = parameterConstructor(**dict_game_parameters)
 
     # Checks to see if the parameters used are in a valid format
-
     validate_game_parameters(optimal_game_parameters)
 
     print("Successfully returned agent game parameters")
 
     return optimal_game_parameters
-

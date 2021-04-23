@@ -115,7 +115,7 @@ class DQN_CNN_Advanced(nn.Module):
                                         nn.ReLU(True)
                                         )
 
-        def conv2d_size_out(size, kernel_size=5, stride=2):
+        def conv2d_size_out(size, kernel_size, stride):
             return (size - (kernel_size - 1) - 1) // stride + 1
 
         convw = w
@@ -157,7 +157,7 @@ def initialise_weights(model):
 
 
 # Class for calculating the Q values
-class QValues():
+class QValues:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Method can be called without creating an instance of the class
@@ -201,8 +201,30 @@ class QValues():
         # (returns the maximum Q values for all actions) for each non-final state
         with torch.no_grad():
             values[non_final_state_locations] = target_net(non_final_states).max(dim=1)[0].detach()
-
         # These Q values are then returned
+        return values
+
+    @staticmethod
+    def get_next_DDQN(policy_net, target_net, next_states):
+        last_screens_of_state = next_states[:, -1, :, :]
+        final_state_locations = last_screens_of_state.flatten(start_dim=1).max(dim=1)[0].eq(0).type(torch.bool)
+        non_final_state_locations = (final_state_locations == False)
+        non_final_states = next_states[non_final_state_locations]  # (B',4,H,W)
+
+        # Finds the batch size by checking to see how many next states are in the next states tensor
+        batch_size = next_states.shape[0]
+
+        # Creates a list of QValues equal to the batch size
+        values = torch.zeros(batch_size).to(QValues.device)
+
+        # BZX: different from DQN
+        with torch.no_grad():
+            # Find the max actions from the policy net
+            argmax_a = policy_net(non_final_states).detach().max(dim=1)[1]
+            # Return values for max actions in target net and the policy net
+            values[non_final_state_locations] = target_net(non_final_states).detach().gather(dim=1,
+                                                                                             index=argmax_a.unsqueeze(
+                                                                                                 -1)).squeeze(-1)
         return values
 
     @staticmethod
@@ -222,36 +244,42 @@ class QValues():
 
         return target_q_values
 
+
+class PolicyGradient:
     @staticmethod
-    def get_next_DDQN(policy_net, target_net, next_states):
-        last_screens_of_state = next_states[:, -1, :, :]  # (B,H,W)
-        final_state_locations = last_screens_of_state.flatten(start_dim=1).max(dim=1)[0].eq(0).type(torch.bool)
-        non_final_state_locations = (final_state_locations == False)
-        non_final_states = next_states[non_final_state_locations]  # (B',4,H,W)
-        batch_size = next_states.shape[0]
-        # print("# of none terminal states = ", batch_size)
-        values = torch.zeros(batch_size).to(QValues.device)
-        if non_final_states.shape[0] == 0:  # BZX: check if there is survival
-            print("EXCEPTION: this batch is all the last states of the episodes!")
-            return values
-        # BZX: different from DQN
-        with torch.no_grad():
-            argmax_a = policy_net(non_final_states).detach().max(dim=1)[1]
-            values[non_final_state_locations] = target_net(non_final_states).detach().gather(dim=1,
-                                                                                             index=argmax_a.unsqueeze(
-                                                                                                 -1)).squeeze(-1)
-        return values
-
-
-class PolicyGradient():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def get_policy_gradient_loss(policy_net, states, actions, rewards, discount, learning_technique):
+        if learning_technique == "reinforce":
+            loss = PolicyGradient.get_reinforce_loss(policy_net, states, actions, rewards, discount)
+        else:
+            raise ValueError("Learning technique not defined")
+        return loss
 
     @staticmethod
-    def get_reinforce_loss(policy_net, states, actions, rewards):
-        logprob = torch.log(policy_net.predict(states))
+    def get_reinforce_loss(policy_net, states, actions, rewards, discount):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Returns rewards as a numpy array
+        numpy_rewards = np.array(rewards.cpu())
+
+        # Calculates the associated rewards with the discount factor
+        discounted_rewards = np.array([float(discount ** i * rewards[i])
+                                       for i in range(len(numpy_rewards))])
+
+        # Finds the cumulative rewards in a given episode
+        discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
+
+        # Returns rewards as a tensor
+        rewards = torch.from_numpy(discounted_rewards).to(device)
+
+        # Deduces the loss for the policy gradient
+        logprob = torch.log(policy_net(states))
+
         selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
-        return -selected_logprobs.mean()
 
+        loss = -selected_logprobs.mean()
+
+        return loss
 
 
 # An experience represents a transaction that the agent took and is what is used for training the network
