@@ -1,4 +1,5 @@
 # Author Lewis Stuart 201262348
+import time
 
 import torchvision.transforms as T
 import gym
@@ -33,6 +34,17 @@ class EnvironmentManager():
         # The state return format
         self.screen_process_type = screen_process_type.lower().strip()
 
+        # Tensor output
+        # 3 RGB tensors are output for colour
+        if self.colour_type == "rgb":
+            self.num_tensor_outputs = 3
+        else:
+            self.num_tensor_outputs = 1
+
+        # Append returns all prev states as tensors
+        if self.screen_process_type == "append":
+            self.num_tensor_outputs *= prev_states_queue_size
+
         # Properties for cropping/outputting the screens
         self.heights = crop_factors[1]
         self.widths = crop_factors[0]
@@ -54,7 +66,7 @@ class EnvironmentManager():
     def establish_reward_scheme(self, custom_rewards):
         default_scheme = {"lives_change_reward": 0, "one_life_game": False,
                           "normalise_rewards": False, "use_given_reward": True,
-                          "end_on_negative": False}
+                          "end_on_negative": False, "use_custom_env_rewards": False}
 
         for scheme, default in default_scheme.items():
             if scheme not in custom_rewards.keys():
@@ -107,6 +119,9 @@ class EnvironmentManager():
             return 0
 
         additional_reward = 0
+
+        if self.reward_scheme["use_custom_env_rewards"]:
+            additional_reward = self.return_custom_env_reward()
 
         if self.reward_scheme["end_on_negative"] and given_reward < 0:
             self.set_episode_end()
@@ -166,6 +181,9 @@ class EnvironmentManager():
     def get_state(self):
         # Queue is reset
         if self.just_starting():
+            if self.current_game == "MsPacmanDeterministic-v0":
+                self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+                                             "pink_ghost": None, "yellow_ghost": None}
             self.reset_state_queue()
 
         # Each of the different state methods are activated
@@ -182,7 +200,10 @@ class EnvironmentManager():
 
     # Returns standard screen, which is the RGB screen pixel data extracted straight from the gym environment
     def get_standard_state(self):
-        return self.get_processed_screen()
+        current_screen = self.get_processed_screen()
+        self.state_queue.pop(0)
+        self.state_queue.append(current_screen)
+        return current_screen
 
     # Returns the difference between the first screen in the queue, and the last screen in the queue
     # This highlights the changes that have been made between these two states. This is advantageous
@@ -224,7 +245,8 @@ class EnvironmentManager():
 
         self.current_screen = self.get_processed_screen()
 
-        discount = 0.7
+        #discount = 0.7
+        discount = 1
 
         # Combines all states by adding all values together
         morphed_states = self.state_queue.pop(0)
@@ -253,6 +275,12 @@ class EnvironmentManager():
             return self.pac_man_state_converter(screen)
         else:
             return screen
+
+    def return_custom_env_reward(self):
+        if self.current_game == "MsPacmanDeterministic-v0":
+            return self.pac_man_custom_reward()
+        else:
+            return 0
 
     # Returns the screen after it has been processed
     def get_processed_screen(self):
@@ -297,7 +325,7 @@ class EnvironmentManager():
         if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.NEAREST)
                 # Resized to the size specified by the resize property
                 , T.ToTensor()  # Transformed to a tensor
             ])
@@ -330,8 +358,8 @@ class EnvironmentManager():
         return batch_tensor
 
     # Accepts Numpy array and returns normalised pacman state
-    @staticmethod
-    def pac_man_state_converter(screen):
+    def pac_man_state_converter(self, screen):
+
         screen_shape = screen.shape
 
         # All RGB values are summed together, giving a colour dimension of size 1
@@ -348,15 +376,68 @@ class EnvironmentManager():
         # of the ghosts) are stored in the red array. This is also done for the pacman sprite as well as all
         # the points and walls in the game
 
-        # Ghosts array
-        red_array = np.where(((resized_numpy > 1.2) & (resized_numpy <= 1.74) |
-                              ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.0)
+        # Blue ghost: 1.65
+        # Red ghost: 1.34
+        # Pink ghost: 1.82
+        # Yellow ghost: 1.37
+        # Pacman ghost: 1.757
 
-        # Pacman array
-        green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.0)
+        iteration = 2
 
-        # Points and walls array
-        blue_array = np.where((resized_numpy > 1.76) & (resized_numpy <= 1.8), 1.0, 0.0)
+        if iteration == 1:
+            # Ghosts array
+            red_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.74)) |
+                                  ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.0)
+
+            # Pacman array
+            green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.0)
+
+            #Points and walls array
+            blue_array = np.where((resized_numpy > 1.76) & (resized_numpy <= 1.8), 1.0, 0.0)
+
+        else:
+            # Ghosts array
+            red_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.4)) |
+                                  ((resized_numpy > 1.6) & (resized_numpy <= 1.7)) |
+                                  ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.01)
+
+            # Pacman array
+            green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.01)
+
+            # Vulnerable ghost array
+            blue_array = np.where((resized_numpy > 1.4) & (resized_numpy <= 1.5), 1.0, 0.01)
+
+        red_ghost_array = np.where((resized_numpy >= 1.33) & (resized_numpy <= 1.35), 1.0, 0.0)
+        blue_ghost_array = np.where((resized_numpy >= 1.64) & (resized_numpy <= 1.66), 1.0, 0.0)
+        pink_ghost_array = np.where((resized_numpy >= 1.81) & (resized_numpy <= 1.83), 1.0, 0.0)
+        yellow_ghost_array = np.where((resized_numpy >= 1.36) & (resized_numpy <= 1.38), 1.0, 0.0)
+
+        is_vulnerable_ghosts = np.where(blue_array == 1.0)[0].size != 0
+
+        if not is_vulnerable_ghosts:
+            if np.where(red_ghost_array == 1.0)[0].size != 0:
+                self.last_ghost_positions["red_ghost"] = red_ghost_array
+            elif self.last_ghost_positions["red_ghost"] is not None:
+                red_array = np.add(red_array, self.last_ghost_positions["red_ghost"])
+                red_array[red_array > 1.0] = 1.0
+
+            if np.where(blue_ghost_array == 1.0)[0].size != 0:
+                self.last_ghost_positions["blue_ghost"] = blue_ghost_array
+            elif self.last_ghost_positions["blue_ghost"] is not None:
+                red_array = np.add(red_array, self.last_ghost_positions["blue_ghost"])
+                red_array[red_array > 1.0] = 1.0
+
+            if np.where(pink_ghost_array == 1.0)[0].size != 0:
+                self.last_ghost_positions["pink_ghost"] = pink_ghost_array
+            elif self.last_ghost_positions["pink_ghost"] is not None:
+                red_array = np.add(red_array, self.last_ghost_positions["pink_ghost"])
+                red_array[red_array > 1.0] = 1.0
+
+            if np.where(yellow_ghost_array == 1.0)[0].size != 0:
+                self.last_ghost_positions["yellow_ghost"] = yellow_ghost_array
+            elif self.last_ghost_positions["yellow_ghost"] is not None:
+                red_array = np.add(red_array, self.last_ghost_positions["yellow_ghost"])
+                red_array[red_array > 1.0] = 1.0
 
         # Arrays are reshaped back to the original dimensions
         red_array = red_array.reshape(1, screen_shape[1], screen_shape[2])
@@ -369,4 +450,50 @@ class EnvironmentManager():
         # Image is reshaped to form the same dimensions as the normal screen
         final_array = final_array.reshape(screen_shape[0], screen_shape[1], screen_shape[2])
 
+        # Removes all elements inside of the inner square on the centre of the board, as ghosts inside
+        # are not a threat
+        final_array[:, 60:96, 64:96] = 0
+
         return final_array
+
+    def pac_man_custom_reward(self):
+
+        def return_pac_distances(ghost_pixels):
+
+            if pac_man_pixels[0].size == 0 or pac_man_pixels[1].size == 0:
+                return 0
+
+            average_horizontal_pos = np.mean(pac_man_pixels[0])
+            average_vertical_pos = np.mean(pac_man_pixels[1])
+
+            horizontal_distances = np.absolute(np.subtract(ghost_pixels[0], average_horizontal_pos))
+            vertical_distances = np.absolute(np.subtract(ghost_pixels[1], average_vertical_pos))
+
+            closest_horizontal_distance = np.amin(horizontal_distances)
+            closest_vertical_distance = np.amin(vertical_distances)
+
+            relative_distance = math.sqrt(closest_horizontal_distance ** 2 + closest_vertical_distance ** 2)
+
+            return round(relative_distance, 1)
+
+        current_state = self.state_queue[-1].squeeze(0)
+
+        current_state = current_state.cpu().numpy()
+
+        pac_man_pixels = np.where(current_state[1] == 1.0)
+
+        hostile_ghost_pixels = np.where((current_state[0] == 1.0))
+
+        vulnerable_ghost_pixels = np.where((current_state[2] == 1.0))
+
+        max_distance = round(math.sqrt((current_state[0].shape[0] ** 2) + (current_state[0].shape[1] ** 2)), 1)
+
+        if hostile_ghost_pixels[0].size == 0 or hostile_ghost_pixels[1].size == 0:
+            if vulnerable_ghost_pixels[0].size == 0 or vulnerable_ghost_pixels[1].size == 0:
+                return 0
+            pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels))/4
+        else:
+            pac_man_distance_reward = return_pac_distances(hostile_ghost_pixels)
+
+        return pac_man_distance_reward
+

@@ -11,6 +11,7 @@ from torch.nn import Softmax
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
 
+
 # Deep Q network class
 # nn.Module- the base class for all neural networks. Hence all aspects of the neural network will
 # extend from the module class
@@ -25,13 +26,12 @@ class DQN(nn.Module):
         self.learning_technique = learning_technique
 
         # Three fully connected hidden layers- fully connected layers are known as 'linear' layers
-        self.fc1 = nn.Linear(in_features=img_height*img_width*3, out_features=128)
+        self.fc1 = nn.Linear(in_features=img_height * img_width * 3, out_features=128)
         self.fc2 = nn.Linear(in_features=128, out_features=68)
         self.fc3 = nn.Linear(in_features=68, out_features=32)
 
         # One output layer (avaliable actions)
         self.out = nn.Linear(in_features=32, out_features=num_actions)
-
 
     # A forward pass through the network with an image sensor T
     def forward(self, t):
@@ -50,7 +50,7 @@ class DQN(nn.Module):
 
 # A deep neural network with convoluted layers to process the image
 class DQN_CNN_Basic(nn.Module):
-    def __init__(self, h, w, outputs, input_channels,  nn_structure: dict, learning_technique):
+    def __init__(self, h, w, outputs, input_channels, nn_structure: dict, learning_technique):
         super(DQN_CNN_Basic, self).__init__()
 
         self.learning_technique = learning_technique
@@ -107,13 +107,14 @@ class DQN_CNN_Advanced(nn.Module):
         strides = nn_structure["strides"]
         neurons_per_layer = nn_structure["neurons_per_layer"]
 
-        self.cnn = nn.Sequential(nn.Conv2d(input_channels, neurons_per_layer[0], kernel_size=kernel_sizes[0], stride=strides[0]),
-                                        nn.ReLU(True),
-                                        nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1], kernel_size=kernel_sizes[1], stride=strides[1]),
-                                        nn.ReLU(True),
-                                        nn.Conv2d(neurons_per_layer[1], neurons_per_layer[2], kernel_size=kernel_sizes[2], stride=strides[2]),
-                                        nn.ReLU(True)
-                                        )
+        self.cnn = nn.Sequential(
+            nn.Conv2d(input_channels, neurons_per_layer[0], kernel_size=kernel_sizes[0], stride=strides[0]),
+            nn.ReLU(True),
+            nn.Conv2d(neurons_per_layer[0], neurons_per_layer[1], kernel_size=kernel_sizes[1], stride=strides[1]),
+            nn.ReLU(True),
+            nn.Conv2d(neurons_per_layer[1], neurons_per_layer[2], kernel_size=kernel_sizes[2], stride=strides[2]),
+            nn.ReLU(True)
+            )
 
         def conv2d_size_out(size, kernel_size, stride):
             return (size - (kernel_size - 1) - 1) // stride + 1
@@ -201,6 +202,7 @@ class QValues:
         # (returns the maximum Q values for all actions) for each non-final state
         with torch.no_grad():
             values[non_final_state_locations] = target_net(non_final_states).max(dim=1)[0].detach()
+
         # These Q values are then returned
         return values
 
@@ -289,16 +291,16 @@ Experience = namedtuple(
     ('state', 'action', 'next_state', 'reward')
 )
 
+
 # Stores all the previous experiences and is used for helping the agent learn
 class ReplayMemory():
     def __init__(self, capacity, start_size):
         self.capacity = capacity
         self.memory = []
         self.push_count = 0
+        if not start_size:
+            self.start_size = 0
         self.start_size = start_size
-
-        if start_size > capacity:
-            raise ValueError("Replay capacity cannot be smaller than the start size")
 
     # Pushes the new experience to the replay memory queue
     def push(self, experience):

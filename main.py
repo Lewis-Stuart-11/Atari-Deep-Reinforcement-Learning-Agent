@@ -140,23 +140,9 @@ def train_Q_agent(em, agent):
     if not agent_parameters:
         raise ValueError("Agent parameters are not defined")
 
-    # Establishes the replay memory
-    memory = ReplayMemory(agent_parameters.memory_size, agent_parameters.memory_size_start)
-
     # Screen width and heights are returned
     screen_width = em.get_screen_width()
     screen_height = em.get_screen_height()
-
-    colour_type = agent_parameters.colour_type
-
-    num_returned_states = 1
-    if agent_parameters.screen_process_type == "append":
-        num_returned_states = agent_parameters.prev_states_queue_size
-
-    if colour_type == "rgb":
-        input_channels = 3 * num_returned_states
-    else:
-        input_channels = 1 * num_returned_states
 
     learning_technique = agent_parameters.learning_technique
 
@@ -176,26 +162,26 @@ def train_Q_agent(em, agent):
     # Uses a deep neural network (with convolution layers)
     elif agent_parameters.policy == "DQN_CNN_Basic":
         # Establishes Policy and Target networks
-        policy_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
+        policy_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
                                    agent_parameters.policy_parameters, learning_technique).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
         if learning_technique in deep_q_learning_methods:
-            target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), input_channels,
+            target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
                                        agent_parameters.policy_parameters, learning_technique).to(device)
 
     elif agent_parameters.policy == "DQN_CNN_Advanced":
         policy_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
-                                      em.num_actions_available(), input_channels,
+                                      em.num_actions_available(), em.num_tensor_outputs,
                                       agent_parameters.policy_parameters, learning_technique).to(device)
 
         policy_net.apply(initialise_weights)
 
         if learning_technique in deep_q_learning_methods:
             target_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
-                                          em.num_actions_available(), input_channels,
+                                          em.num_actions_available(), em.num_tensor_outputs,
                                           agent_parameters.policy_parameters, learning_technique).to(device)
 
     else:
@@ -211,18 +197,25 @@ def train_Q_agent(em, agent):
         # Sets and optimiser with the values to optimised as the parameters of the policy network, with the learning rate
         optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
 
+        # Establishes the replay memory
+        memory = ReplayMemory(agent_parameters.memory_size, agent_parameters.memory_size_start)
+
+        # Number of states in a batch
+        batch_size = agent_parameters.batch_size
+
+        # How often to improve the neural network weights (how many steps per episode to update)
+        improve_step_factor = agent_parameters.update_factor
+
     elif learning_technique in policy_gradient_methods:
         target_net = None
 
         optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
+
+        memory = ReplayMemory(50000, None)
+
+        improve_episode_factor = agent_parameters.improve_episode_factor
     else:
         raise ValueError("Learning technique not defined")
-
-    # Number of states in a batch
-    batch_size = agent_parameters.batch_size
-
-    # How often to improve the neural network weights (how many steps per episode to update)
-    improve_step_factor = agent_parameters.update_factor
 
     # Stores episode durations
     episode_durations = []
@@ -278,7 +271,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if (step % 60) == 0 and show_processed_screens:
+            if show_processed_screens and (step % 20 == 0):
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -290,92 +283,94 @@ def train_Q_agent(em, agent):
                 display_processed_screens(next_state_screen, state_screen_cmap, step)
                 display_processed_screens(em.render('rgb_array'), state_screen_cmap, step)
 
+
             # If set, renders the environment on the screen
-            if render_agent_factor and episode > render_agent_factor:
+            if render_agent_factor and episode+1 >= render_agent_factor:
                 em.render()
 
             # Retrieves a sample if possible to learn from if deep q learning is used
-            if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0 \
-                    and (learning_technique in deep_q_learning_methods):
-                experiences = memory.sample(batch_size)
+            if learning_technique in deep_q_learning_methods:
 
-                # Extracts all states, actions, reward and next states into their own tensors
-                states, actions, rewards, next_states = extract_tensors(experiences)
+                if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
+                    experiences = memory.sample(batch_size)
 
-                # Sets the all gradients of all the weights and biases in the policy network to 0
-                # As pytorch accumulates gradients every time it is used, it needs to be reset as to not
-                # Factor in old gradients and biases
-                optimizer.zero_grad()
+                    # Extracts all states, actions, reward and next states into their own tensors
+                    states, actions, rewards, next_states = extract_tensors(experiences)
 
-                # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
-                current_q_values = QValues.get_current(policy_net, states, actions)
+                    # Sets the all gradients of all the weights and biases in the policy network to 0
+                    # As pytorch accumulates gradients every time it is used, it needs to be reset as to not
+                    # Factor in old gradients and biases
+                    optimizer.zero_grad()
 
-                target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states,
-                                                              agent_parameters.discount,
-                                                              rewards, learning_technique)
+                    # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
+                    current_q_values = QValues.get_current(policy_net, states, actions)
 
-                # Calculates loss between the current Q values and the target Q values by using the
-                # mean squared error as the loss function
-                loss = F.mse_loss(current_q_values, target_q_values.unsqueeze(1))
+                    target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states,
+                                                                  agent_parameters.discount,
+                                                                  rewards, learning_technique)
 
-                # Computes the gradients of loss (error) of all the weights and biases in the policy network
-                loss.backward()
+                    # Calculates loss between the current Q values and the target Q values by using the
+                    # mean squared error as the loss function
+                    loss = F.mse_loss(current_q_values, target_q_values.unsqueeze(1))
 
-                # Updates the weights and biases of the policy network with the gradient computed from the loss
-                optimizer.step()
+                    # Computes the gradients of loss (error) of all the weights and biases in the policy network
+                    loss.backward()
+
+                    # Updates the weights and biases of the policy network with the gradient computed from the loss
+                    optimizer.step()
 
             # Checks if the episode has finished
             if em.done:
-                improve_episode_factor = 1
-
                 # Performs optimisation if the method is policy gradient
-                if learning_technique in policy_gradient_methods and episode % improve_episode_factor == 0:
-                    # Returns all the experiences from memory
-                    experiences = memory.return_all_and_clear_memory()
+                if learning_technique in policy_gradient_methods:
 
-                    states, actions, rewards, next_states = extract_tensors(experiences)
+                    if episode % improve_episode_factor == 0:
+                        # Returns all the experiences from memory
+                        experiences = memory.return_all_and_clear_memory()
 
-                    optimizer.zero_grad()
+                        states, actions, rewards, next_states = extract_tensors(experiences)
 
-                    # Returns rewards as a numpy array
-                    numpy_rewards = np.array(rewards.cpu())
+                        optimizer.zero_grad()
 
-                    # Calculates the associated rewards with the discount factor
-                    discounted_rewards = np.array([float(agent_parameters.discount ** i * rewards[i])
-                                                   for i in range(len(numpy_rewards))])
+                        # Returns rewards as a numpy array
+                        numpy_rewards = np.array(rewards.cpu())
 
-                    # Finds the cumulative rewards in a given episode
-                    discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
+                        # Calculates the associated rewards with the discount factor
+                        discounted_rewards = np.array([float(agent_parameters.discount ** i * rewards[i])
+                                                       for i in range(len(numpy_rewards))])
 
-                    # Returns rewards as a tensor
-                    rewards = torch.from_numpy(discounted_rewards).to(device)
+                        # Finds the cumulative rewards in a given episode
+                        discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
 
-                    print("Final rewards")
-                    print(rewards)
-                    print()
+                        # Returns rewards as a tensor
+                        rewards = torch.from_numpy(discounted_rewards).to(device)
 
-                    # Deduces the loss for the policy gradient
-                    logprob = torch.log(policy_net(states))
+                        print("Final rewards")
+                        print(rewards)
+                        print()
 
-                    print("Log probabilities")
-                    print(logprob)
-                    print()
+                        # Deduces the loss for the policy gradient
+                        logprob = torch.log(policy_net(states))
 
-                    selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
+                        print("Log probabilities")
+                        print(logprob)
+                        print()
 
-                    print("Selected log probs")
-                    print(selected_logprobs)
-                    print()
+                        selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
 
-                    loss = -selected_logprobs.mean()
+                        print("Selected log probs")
+                        print(selected_logprobs)
+                        print()
 
-                    print("loss")
-                    print(loss)
-                    print()
+                        loss = -selected_logprobs.mean()
 
-                    loss.backward()
+                        print("loss")
+                        print(loss)
+                        print()
 
-                    optimizer.step()
+                        loss.backward()
+
+                        optimizer.step()
 
                 # Time taken is recorded
                 total_time = str(time.time() - start)
@@ -450,8 +445,9 @@ def train_Q_agent(em, agent):
 
         # Checks to see if the target network needs updating by checking if the episode count is
         # a multiple of the target_update value
-        if episode % agent_parameters.target_update == 0 and agent_parameters.learning_technique in deep_q_learning_methods:
-            target_net.load_state_dict(policy_net.state_dict())
+        if agent_parameters.learning_technique in deep_q_learning_methods:
+            if episode % agent_parameters.target_update == 0:
+                target_net.load_state_dict(policy_net.state_dict())
 
         # Saves the current neural network weights depending on the save factor
         if episode % save_policy_network_factor == 0:
@@ -557,6 +553,9 @@ def print_agent_information(em):
     print()
     print(f"New game: {running_atari_game}")
 
+    deep_q_learning_methods = ["DQL", "DDQL"]
+    policy_gradient_methods = ["reinforce"]
+
     # Outputs action and state space
     print(f"Action Space {em.env.action_space}")
     print(f"State Space {em.env.observation_space}")
@@ -588,8 +587,8 @@ def print_agent_information(em):
 
     # Screen values for how the agent views the environment
     print("Screen values:")
-    print(f"\t-Crop width percentage: {agent_parameters.crop_values[0]}")
-    print(f"\t-Crop height percentage: {agent_parameters.crop_values[1]}")
+    print(f"\t-Crop width percentage: {agent_parameters.crop_values['percentage_crop_height']}")
+    print(f"\t-Crop height percentage: {agent_parameters.crop_values['percentage_crop_width']}")
     print(f"Screen resize: {agent_parameters.resize}")
     print(f"Screen colour type: {agent_parameters.colour_type}")
     print()
@@ -607,10 +606,15 @@ def print_agent_information(em):
         print(f"\t-{current_property.capitalize().replace('_', ' ')}: {value}")
     print()
 
-    print("Replay parameters:")
-    print(f"\tNumber of experiences saved replay memory: {agent_parameters.memory_size}")
-    print(f"\tEpisodes to update target network (with policy network): {agent_parameters.target_update}")
-    print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
+    if agent_parameters.learning_technique in deep_q_learning_methods:
+        print("Replay parameters:")
+        print(f"\tNumber of experiences saved replay memory: {agent_parameters.memory_size}")
+        print(f"\tMemory start experience size: {agent_parameters.memory_size_start}")
+        print()
+        print(f"\tEpisodes to update target network (with policy network): {agent_parameters.target_update}")
+        print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
+    else:
+        print(f"Episode update factor: {agent_parameters.improve_episode_factor}")
     print()
 
     # CUDA Information is displayed
@@ -680,8 +684,8 @@ def test(policy_name: str):
 def return_env_with_atari_game(atari_game):
     try:
         # The percentages to crop the screen for returning a state
-        crop_width = agent_parameters.crop_values[0]
-        crop_height = agent_parameters.crop_values[1]
+        crop_width = agent_parameters.crop_values["percentage_crop_width"]
+        crop_height = agent_parameters.crop_values["percentage_crop_height"]
 
         # Resizes the image for output
         resize = agent_parameters.resize

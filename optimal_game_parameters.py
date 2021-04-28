@@ -49,6 +49,9 @@ def validate_game_parameters(game_parameters: OptimalParameters):
                             "epsilon greedy reward": ["start", "end", "decay_linear", "reward_incrementation",
                                                       "reward_target", "reward_decay"]}
 
+    deep_q_learning_methods = ["DQL", "DDQL"]
+    policy_gradient_methods = ["reinforce"]
+
     # Learning rate must be between 1-0
     if not (1 >= game_parameters.learning_rate > 0):
         raise ValueError(f"Learning rate must be between 1 and 0")
@@ -66,7 +69,6 @@ def validate_game_parameters(game_parameters: OptimalParameters):
                 and not (0 <= int(game_parameters.epsilon_values[epsilon_property]) <= 1):
             raise ValueError(f"Epsilon value {epsilon_property} must be between 1-0")
 
-
     # Discount must be between 1 and 0 to be valid
     if not (1 >= game_parameters.discount > 0):
         raise ValueError(f"Discount value must be between 1 and 0")
@@ -83,16 +85,18 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     if len(game_parameters.crop_values) != 2:
         raise ValueError(f"Cropping values must include data for X and Y dimensions")
 
-    if len(game_parameters.crop_values[0]) != 2 or len(game_parameters.crop_values[1]) != 2:
+    if len(game_parameters.crop_values["percentage_crop_width"]) != 2 or \
+            len(game_parameters.crop_values["percentage_crop_height"]) != 2:
         raise ValueError(f"Cropping values must include percentages for both sides of X and Y dimension")
 
     # As the cropping works from left-right and top-bottom, the left and top values must be larger than the right and
     # bottom values, otherwise this will result in indexing errors
     for dimension in game_parameters.crop_values:
-        if dimension[0] > dimension[1]:
+        if game_parameters.crop_values[dimension][0] > game_parameters.crop_values[dimension][1]:
             raise ValueError(
-                f"Left/Top crop value ({dimension[0]}) cannot be larger than Right/Bottom crop value {dimension[1]}")
-        if not (1 >= dimension[0] >= 0) or not (1 >= dimension[1] >= 0):
+                f"Left/Top crop value ({game_parameters.crop_values[dimension][0]}) \
+                cannot be larger than Right/Bottom crop value {game_parameters.crop_values[dimension][1]}")
+        if not (1 >= game_parameters.crop_values[dimension][0] >= 0) or not (1 >= game_parameters.crop_values[dimension][1] >= 0):
             raise ValueError(f"Crop values must be between 0-1")
 
     # Processing type must be supported
@@ -123,29 +127,40 @@ def validate_game_parameters(game_parameters: OptimalParameters):
             raise ValueError(f"Game policy parameters {policy_parameters}\
              of insufficient size: {len(policy_parameters)} != {required_policy_parameters[policy_parameters]}")
 
-    # The memory size must be larger than the batch size, so that the memory can return enough experiences to match the
-    # batch size parameter
-    if game_parameters.batch_size > game_parameters.memory_size:
-        raise ValueError(f"Replay memory size must be larger than the batch size")
+    if not(game_parameters.learning_technique in deep_q_learning_methods
+           or game_parameters.learning_technique in policy_gradient_methods):
+        raise ValueError(f"Learning techniques must be one of the following available methods \
+                        {policy_gradient_methods + deep_q_learning_methods}")
 
-    # The batch size should be large enough that it can actually update correctly with the rewards, but small enough
-    # that is doesn't take the neural network too long to converge
-    if not (10000 >= game_parameters.batch_size > 10):
-        raise ValueError(f"Batch size must be between 10 and 10000")
+    if game_parameters.learning_technique in deep_q_learning_methods:
 
-    # Memory must be the correct size to avoid memory errors or not enough experiences being stored
-    if not (1000000 >= game_parameters.memory_size > 50):
-        raise ValueError(f"Replay memory size must be between 50 and 1,000,000")
+        # The memory size must be larger than the batch size, so that the memory can return enough experiences to match the
+        # batch size parameter
+        if game_parameters.batch_size > game_parameters.memory_size:
+            raise ValueError(f"Replay memory size must be larger than the batch size")
 
-    # Memory learning start size must be in between the max replay size and 0, this is because the replay memory will
-    # only return experiences once the amount memory is greater than this value
-    if game_parameters.memory_size_start > game_parameters.memory_size or game_parameters.memory_size_start < 0:
-        raise ValueError(
-            f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
+        # The batch size should be large enough that it can actually update correctly with the rewards, but small enough
+        # that is doesn't take the neural network too long to converge
+        if not (10000 >= game_parameters.batch_size > 10):
+            raise ValueError(f"Batch size must be between 10 and 10000")
 
-    # The target update should be small enough that the policy and target networks update enough
-    if not (100 >= game_parameters.target_update > 1):
-        raise ValueError(f"Target update factor must be between 1 and 100")
+        # Memory must be the correct size to avoid memory errors or not enough experiences being stored
+        if not (1000000 >= game_parameters.memory_size > 50):
+            raise ValueError(f"Replay memory size must be between 50 and 1,000,000")
+
+        # Memory learning start size must be in between the max replay size and 0, this is because the replay memory will
+        # only return experiences once the amount memory is greater than this value
+        if game_parameters.memory_size_start > game_parameters.memory_size or game_parameters.memory_size_start < 0:
+            raise ValueError(
+                f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
+
+        # The target update should be small enough that the policy and target networks update enough
+        if not (100 >= game_parameters.target_update > 1):
+            raise ValueError(f"Target update factor must be between 1 and 100")
+
+    else:
+        if not(0 < game_parameters.improve_episode_factor < 100):
+            raise ValueError(f"Improve episode factor must be between 0-100")
 
     # Iterates through the reward scheme settings and checks each one is of the correct type
     bool_reward_types = ["use_given_reward", "one_life_game", "normalise_rewards", "end_on_negative"]
@@ -171,6 +186,9 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 def retrieve_game_parameters(atari_game: str, index: int):
     with open("game_parameters.json", "r") as settings_json_file:
         parameter_handler = json.load(settings_json_file)
+
+    if atari_game not in parameter_handler:
+        raise ValueError(f"Game parameters for {atari_game} could not be found")
 
     parameter_list = parameter_handler[atari_game]
 
