@@ -15,7 +15,7 @@ np.random.seed(0)
 # Handles the gym environment and all properties regarding game states
 class EnvironmentManager():
     def __init__(self, game, crop_factors, resize, screen_process_type,
-                 prev_states_queue_size, colour_type, custom_rewards=None):
+                 prev_states_queue_size, colour_type, resize_interpolation_mode, custom_rewards=None):
 
         if custom_rewards is None:
             custom_rewards = {}
@@ -28,6 +28,13 @@ class EnvironmentManager():
         self.state_info = None
         self.colour_type = colour_type
         self.current_screen = None
+
+        if resize_interpolation_mode.lower() == "nearest":
+            self.resize_interpolation_mode = T.InterpolationMode.NEAREST
+        elif resize_interpolation_mode.lower() == "bicubic":
+            self.resize_interpolation_mode = T.InterpolationMode.BICUBIC
+        else:
+            self.resize_interpolation_mode = T.InterpolationMode.BILINEAR
 
         self.current_game = game
 
@@ -325,7 +332,7 @@ class EnvironmentManager():
         if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.NEAREST)
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode)
                 # Resized to the size specified by the resize property
                 , T.ToTensor()  # Transformed to a tensor
             ])
@@ -334,7 +341,7 @@ class EnvironmentManager():
             # Use torchvision package to compose image transforms
             resize = T.Compose([
                 T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=T.InterpolationMode.BILINEAR)
+                , T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode)
                 # Resized to the size specified by the resize property
                 , T.Grayscale(num_output_channels=1)  # Sets the image to grayscale
                 , T.ToTensor()  # Transformed to a tensor

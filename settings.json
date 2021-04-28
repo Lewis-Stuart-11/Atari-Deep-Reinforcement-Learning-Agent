@@ -1,5 +1,5 @@
 {
-  "running_atari_game": "MsPacmanDeterministic-v0",
+  "running_atari_game": "BreakoutDeterministic-v4",
   "parameter_index": 1,
   "num_training_episodes": 15000,
   "plot_update_episode_factor": 100,

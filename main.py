@@ -591,6 +591,7 @@ def print_agent_information(em):
     print(f"\t-Crop height percentage: {agent_parameters.crop_values['percentage_crop_width']}")
     print(f"Screen resize: {agent_parameters.resize}")
     print(f"Screen colour type: {agent_parameters.colour_type}")
+    print(f"Screen Interpolation mode: {agent_parameters.resize_interpolation_mode}")
     print()
 
     # State processing types are displayed
@@ -695,11 +696,11 @@ def return_env_with_atari_game(atari_game):
 
         reward_scheme = agent_parameters.reward_scheme
 
-        # em = AtariEnvManager("cpu", default_atari_game, False)
+        resize_interpolation_mode = agent_parameters.resize_interpolation_mode
 
         # Environment is set to the passed atari game
         em = EnvironmentManager(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                prev_states_queue_size, colour_type, reward_scheme)
+                                prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
@@ -799,6 +800,9 @@ def main(arguements):
         policy_net = train_Q_agent(em, agent)
         final_run_time = str(time.time() - start_run_time)
         torch.save(policy_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_Final")
+
+        print(f"Final run time: {final_run_time}")
+        print()
 
         pause = input("Agent has finished, enter to continue to normal play \n>")
         print()

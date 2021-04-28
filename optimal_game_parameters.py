@@ -13,6 +13,7 @@ OptimalParameters = namedtuple(
         'epsilon_values',  # Exploration vs Exploration values
         'discount',  # How impactful future rewards are
         'resize',  # The final size of the screen to enter into the neural network
+        'resize_interpolation_mode', # The pixel conversion technique for resizing the image
         'crop_values',  # Crop values to shrink down the size of the screen
         'screen_process_type',  # How the environment processes the screen
         'colour_type',  # Depicts how the screen should be processed with colour
@@ -52,6 +53,8 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     deep_q_learning_methods = ["DQL", "DDQL"]
     policy_gradient_methods = ["reinforce"]
 
+    resize_interpolation_modes = ["bilinear", "nearest", "bicubic"]
+
     # Learning rate must be between 1-0
     if not (1 >= game_parameters.learning_rate > 0):
         raise ValueError(f"Learning rate must be between 1 and 0")
@@ -79,6 +82,9 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
     if game_parameters.resize[0] <= 0 or game_parameters.resize[1] <= 0:
         raise ValueError(f"Resize image dimensions cannot be less than 0")
+
+    if game_parameters.resize_interpolation_mode.lower() not in resize_interpolation_modes:
+        raise ValueError(f"Resize Interpolation mode must be in set: {resize_interpolation_modes}")
 
     # The crop values are a two dimensional array, each representing the percentage to crop the image, hence each must
     # dimension must have a size of two
