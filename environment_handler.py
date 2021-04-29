@@ -8,12 +8,14 @@ import numpy as np
 import atari_py
 import math
 
+from abc import ABC, abstractmethod
+
 # Ensures that the results will be the same (same starting random seed each time)
 np.random.seed(0)
 
 
 # Handles the gym environment and all properties regarding game states
-class EnvironmentManager():
+class EnvironmentManager(ABC):
     def __init__(self, game, crop_factors, resize, screen_process_type,
                  prev_states_queue_size, colour_type, resize_interpolation_mode, custom_rewards=None):
 
@@ -188,10 +190,9 @@ class EnvironmentManager():
     def get_state(self):
         # Queue is reset
         if self.just_starting():
-            if self.current_game == "MsPacmanDeterministic-v0":
-                self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
-                                             "pink_ghost": None, "yellow_ghost": None}
             self.reset_state_queue()
+
+            self.set_custom_episode_reset_info()
 
         # Each of the different state methods are activated
         if self.screen_process_type == "difference":
@@ -277,18 +278,6 @@ class EnvironmentManager():
         screen = self.get_state()
         return screen.shape[3]
 
-    def return_custom_screen(self, screen):
-        if self.current_game == "MsPacmanDeterministic-v0":
-            return self.pac_man_state_converter(screen)
-        else:
-            return screen
-
-    def return_custom_env_reward(self):
-        if self.current_game == "MsPacmanDeterministic-v0":
-            return self.pac_man_custom_reward()
-        else:
-            return 0
-
     # Returns the screen after it has been processed
     def get_processed_screen(self):
         # Renders the screen as an rgb_array and this is used as the current state
@@ -364,9 +353,51 @@ class EnvironmentManager():
 
         return batch_tensor
 
-    # Accepts Numpy array and returns normalised pacman state
-    def pac_man_state_converter(self, screen):
+    @abstractmethod
+    def return_custom_screen(self, screen):
+        pass
 
+    @abstractmethod
+    def return_custom_env_reward(self):
+        pass
+
+    @abstractmethod
+    def set_custom_episode_reset_info(self):
+        pass
+
+
+class EnvironmentManagerGeneral(EnvironmentManager):
+    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                 resize_interpolation_mode, custom_rewards=None):
+
+        super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                         resize_interpolation_mode, custom_rewards)
+
+
+    def return_custom_screen(self, screen):
+        return screen
+
+    def return_custom_env_reward(self):
+        return 0
+
+    def set_custom_episode_reset_info(self):
+        pass
+
+
+class EnvironmentManagerPacMan(EnvironmentManager):
+    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                 resize_interpolation_mode, custom_rewards=None):
+
+        super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                         resize_interpolation_mode, custom_rewards)
+
+        self.prev_reward = 0
+
+        self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+                                     "pink_ghost": None, "yellow_ghost": None}
+
+
+    def return_custom_screen(self, screen):
         screen_shape = screen.shape
 
         # All RGB values are summed together, giving a colour dimension of size 1
@@ -399,7 +430,7 @@ class EnvironmentManager():
             # Pacman array
             green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.0)
 
-            #Points and walls array
+            # Points and walls array
             blue_array = np.where((resized_numpy > 1.76) & (resized_numpy <= 1.8), 1.0, 0.0)
 
         else:
@@ -463,8 +494,7 @@ class EnvironmentManager():
 
         return final_array
 
-    def pac_man_custom_reward(self):
-
+    def return_custom_env_reward(self):
         def return_pac_distances(ghost_pixels):
 
             if pac_man_pixels[0].size == 0 or pac_man_pixels[1].size == 0:
@@ -498,9 +528,40 @@ class EnvironmentManager():
         if hostile_ghost_pixels[0].size == 0 or hostile_ghost_pixels[1].size == 0:
             if vulnerable_ghost_pixels[0].size == 0 or vulnerable_ghost_pixels[1].size == 0:
                 return 0
-            pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels))/4
+            pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels)) / 4
         else:
             pac_man_distance_reward = return_pac_distances(hostile_ghost_pixels)
 
+        prev_reward = self.prev_reward
+        if not prev_reward:
+            self.prev_reward = pac_man_distance_reward
+            return 0
+        else:
+            self.prev_reward = pac_man_distance_reward
+            pac_man_distance_reward -= prev_reward
+
         return pac_man_distance_reward
 
+    def set_custom_episode_reset_info(self):
+        self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+                                     "pink_ghost": None, "yellow_ghost": None}
+
+        self.prev_reward = None
+
+
+class EnvironmentManagerEnduro(EnvironmentManager):
+    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                 resize_interpolation_mode, custom_rewards=None):
+
+        super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
+                         resize_interpolation_mode, custom_rewards)
+
+
+    def return_custom_screen(self, screen):
+        return screen
+
+    def return_custom_env_reward(self):
+        return 0
+
+    def set_custom_episode_reset_info(self):
+        pass

@@ -698,9 +698,15 @@ def return_env_with_atari_game(atari_game):
 
         resize_interpolation_mode = agent_parameters.resize_interpolation_mode
 
-        # Environment is set to the passed atari game
-        em = EnvironmentManager(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+        if atari_game == "MsPacmanDeterministic-v0":
+            em = EnvironmentManagerPacMan(atari_game, [crop_width, crop_height], resize, screen_process_type,
+                                    prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+        elif atari_game == "EnduroDeterministic-v0":
+            em = EnvironmentManagerEnduro(atari_game, [crop_width, crop_height], resize, screen_process_type,
+                                          prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+        else:
+            em = EnvironmentManagerGeneral(atari_game, [crop_width, crop_height], resize, screen_process_type,
+                                    prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
