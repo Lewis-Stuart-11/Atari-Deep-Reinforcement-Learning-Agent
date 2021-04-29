@@ -517,16 +517,13 @@ class EnvironmentManagerPacMan(EnvironmentManager):
             horizontal_distances = np.absolute(np.subtract(ghost_pixels[0], average_horizontal_pos))
             vertical_distances = np.absolute(np.subtract(ghost_pixels[1], average_vertical_pos))
 
-            # The closest horizontal and vertical ghost pixel is returned
-            closest_horizontal_distance = np.amin(horizontal_distances)
-            closest_vertical_distance = np.amin(vertical_distances)
+            # Calculates the distance between pacman and each ghost pixel
+            relative_distances = np.sqrt(horizontal_distances ** 2 + vertical_distances ** 2)
 
-            # TODO FIX
+            # The closest distance is returned
+            closest_relative_distance = np.amin(relative_distances)
 
-            # Calculates the distance between pacman and the closest ghost sprite
-            relative_distance = math.sqrt(closest_horizontal_distance ** 2 + closest_vertical_distance ** 2)
-
-            return round(relative_distance, 1)
+            return round(closest_relative_distance, 1)
 
         current_state = self.state_queue[-1].squeeze(0)
 
