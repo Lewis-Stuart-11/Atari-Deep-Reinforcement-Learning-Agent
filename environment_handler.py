@@ -1,5 +1,4 @@
 # Author Lewis Stuart 201262348
-import time
 
 import torchvision.transforms as T
 import gym
@@ -14,7 +13,8 @@ from abc import ABC, abstractmethod
 np.random.seed(0)
 
 
-# Handles the gym environment and all properties regarding game states
+# Handles the gym environment and all properties regarding game states, this class is abstract as each game
+# has different implementations of state and reward manipulation
 class EnvironmentManager(ABC):
     def __init__(self, game, crop_factors, resize, screen_process_type,
                  prev_states_queue_size, colour_type, resize_interpolation_mode, custom_rewards=None):
@@ -23,14 +23,25 @@ class EnvironmentManager(ABC):
             custom_rewards = {}
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Initialises gym environment
         self.env = gym.make(game).unwrapped
         self.env.seed(0)
         self.env.reset()
-        self.done = False  # Episode has not finished
+
+        # Stores whether the current episode has finished
+        self.done = False
+
+        # Stores extra information about the state, in most cases this is the number of lives the agent has
         self.state_info = None
+
+        # Colour type defines how state colour is handled- this can either be gray or coloured (RGB)
         self.colour_type = colour_type
+
+        # Current screen of the environment, default for new episodes is None
         self.current_screen = None
 
+        # Defines the state resize interpolation mode
         if resize_interpolation_mode.lower() == "nearest":
             self.resize_interpolation_mode = T.InterpolationMode.NEAREST
         elif resize_interpolation_mode.lower() == "bicubic":
@@ -38,6 +49,7 @@ class EnvironmentManager(ABC):
         else:
             self.resize_interpolation_mode = T.InterpolationMode.BILINEAR
 
+        # The current game of the environment (e.g. Pac-man)
         self.current_game = game
 
         # The state return format
@@ -64,11 +76,11 @@ class EnvironmentManager(ABC):
         self.num_states = prev_states_queue_size
         self.current_state_num = 0
 
-        self.use_additional_info = True
-
+        # Establishes the reward scheme, defaults are set if custom rewards are not passed
         self.reward_scheme = {}
         self.establish_reward_scheme(custom_rewards)
 
+        # Defines if the first action of the episode is taken
         self.is_first_action = True
 
     # Sets a default scheme unless a given reward scheme is passed
@@ -99,9 +111,6 @@ class EnvironmentManager(ABC):
     def render(self, mode='human'):
         return self.env.render(mode)
 
-    def just_starting(self):
-        return self.current_screen is None
-
     # Finishes episode prematurely
     def set_episode_end(self):
         self.done = True
@@ -129,9 +138,11 @@ class EnvironmentManager(ABC):
 
         additional_reward = 0
 
+        # If customised environment rewards are set, then the abstract method is called
         if self.reward_scheme["use_custom_env_rewards"]:
             additional_reward = self.return_custom_env_reward()
 
+        # Ends the episode if a negative reward is found
         if self.reward_scheme["end_on_negative"] and given_reward < 0:
             self.set_episode_end()
             additional_reward = int(self.reward_scheme["lives_change_reward"])
@@ -165,13 +176,12 @@ class EnvironmentManager(ABC):
         # Copies environment reward to be returned unaltered
         actual_env_reward = env_reward
 
+        # If the environment reward should not be used, then all environment rewards are set to 0
         if not self.reward_scheme["use_given_reward"]:
             env_reward = 0
 
         # If additional rewards are set, then this is returned and the additional state information is updated
-        extra_reward = 0
-        if self.use_additional_info:
-            extra_reward = self.additional_rewards(state_info, env_reward)
+        extra_reward = self.additional_rewards(state_info, env_reward)
         self.state_info = state_info
 
         final_reward = extra_reward + env_reward
@@ -188,11 +198,18 @@ class EnvironmentManager(ABC):
 
     # Returns the current state of the environment depending on the process type
     def get_state(self):
-        # Queue is reset
-        if self.just_starting():
+
+        # New episode is starting
+        if self.current_screen is None:
+
+            # State queue is reset
             self.reset_state_queue()
 
+            # Custom episode info is set in child classes
             self.set_custom_episode_reset_info()
+
+        # Sets the current screen to the current environment state
+        self.current_screen = self.get_processed_screen()
 
         # Each of the different state methods are activated
         if self.screen_process_type == "difference":
@@ -206,19 +223,20 @@ class EnvironmentManager(ABC):
         else:
             raise ValueError(f"Process type: '{self.screen_process_type}' not found")
 
-    # Returns standard screen, which is the RGB screen pixel data extracted straight from the gym environment
+    # Returns standard screen, which is the screen pixel data extracted straight from the gym environment
     def get_standard_state(self):
-        current_screen = self.get_processed_screen()
         self.state_queue.pop(0)
-        self.state_queue.append(current_screen)
-        return current_screen
+        self.state_queue.append(self.current_screen)
+
+        if self.done:
+            return torch.zeros_like(self.current_screen)
+
+        return self.current_screen
 
     # Returns the difference between the first screen in the queue, and the last screen in the queue
     # This highlights the changes that have been made between these two states. This is advantageous
     # for environments where movement is key and static
     def get_difference_state(self):
-
-        self.current_screen = self.get_processed_screen()
 
         # If the episode has finished, then the final screen should be all black
         if self.done:
@@ -234,27 +252,25 @@ class EnvironmentManager(ABC):
     # vertical image that is what is evaluated by the neural network
     def get_appended_state(self):
 
-        self.current_screen = self.get_processed_screen()
-
         # If the episode has finished, add a black screen to the queue
         if self.done:
             black_screen = torch.zeros_like(self.current_screen)
             self.state_queue.pop(0)
             self.state_queue.append(black_screen)
 
-        # Else append the current screen to the queue and remove oldest state
+        # Append the current screen to the queue and remove oldest state
         else:
             self.state_queue.pop(0)
             self.state_queue.append(self.current_screen)
 
         return torch.stack(self.state_queue, dim=1).squeeze(2)
 
+    # Returns all the states in the state queue as one tensor, with the value of the previous states being
+    # decreased by a discount factor
     def get_morphed_state(self):
 
-        self.current_screen = self.get_processed_screen()
-
-        #discount = 0.7
-        discount = 1
+        # How much to discount previous state values
+        discount = 0.7
 
         # Combines all states by adding all values together
         morphed_states = self.state_queue.pop(0)
@@ -270,13 +286,11 @@ class EnvironmentManager(ABC):
 
     # Return the screen height of the processed state
     def get_screen_height(self):
-        screen = self.get_state()
-        return screen.shape[2]
+        return self.get_state().shape[2]
 
     # Return the screen width of the processed state
     def get_screen_width(self):
-        screen = self.get_state()
-        return screen.shape[3]
+        return self.get_state().shape[3]
 
     # Returns the screen after it has been processed
     def get_processed_screen(self):
@@ -318,54 +332,50 @@ class EnvironmentManager(ABC):
         # Converts screen to a tensor
         screen = torch.from_numpy(screen)
 
+        # If the colour is RGB, resize with colour
         if self.colour_type == "rgb":
             resize = T.Compose([
-                T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode)
-                # Resized to the size specified by the resize property
-                , T.ToTensor()  # Transformed to a tensor
+                T.ToPILImage(),  # Firstly tensor is converted to a PIL image
+                T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode),
+                # Resized to the size specified by the resize property with correct interpolation mode
+                T.ToTensor()  # Transformed to a tensor
             ])
 
+        # Otherwise, resize with no colour
         else:
             # Use torchvision package to compose image transforms
             resize = T.Compose([
-                T.ToPILImage()  # Firstly tensor is converted to a PIL image
-                , T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode)
+                T.ToPILImage(),  # Firstly tensor is converted to a PIL image
+                T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode),
                 # Resized to the size specified by the resize property
-                , T.Grayscale(num_output_channels=1)  # Sets the image to grayscale
-                , T.ToTensor()  # Transformed to a tensor
+                T.Grayscale(num_output_channels=1),  # Sets the image to grayscale
+                T.ToTensor()  # Transformed to a tensor
             ])
 
         # Returns a tensor from the image composition
-        # resized_tensor = resize(screen).to(self.device)
-
         resized_tensor = resize(screen).to(self.device)
 
-        # Converts all colour values to either 0 or 1 (very costly as had to make custom operation to perform this)
-        cut_off = 0.1
-        if self.colour_type == "binary":
-            for width in range(self.resize[0]):
-                for length in range(self.resize[1]):
-                    resized_tensor[0, width, length] = 0 if resized_tensor[0, width, length] < cut_off else 1
-
         # An extra dimension is added as these will represent a batch of states
-        batch_tensor = resized_tensor.unsqueeze(0).to(self.device)
+        return resized_tensor.unsqueeze(0).to(self.device)
 
-        return batch_tensor
-
+    # Returns custom state screen for environment implementation
     @abstractmethod
     def return_custom_screen(self, screen):
         pass
 
+    # Returns custom reward for environment implementation
     @abstractmethod
     def return_custom_env_reward(self):
         pass
 
+    # Sets default custom episode properties per episode reset
     @abstractmethod
     def set_custom_episode_reset_info(self):
         pass
 
 
+# Basic environment manger, used for environments that do not have an implementation, or those that do not require
+# additional state and reward manipulation
 class EnvironmentManagerGeneral(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
                  resize_interpolation_mode, custom_rewards=None):
@@ -383,7 +393,7 @@ class EnvironmentManagerGeneral(EnvironmentManager):
     def set_custom_episode_reset_info(self):
         pass
 
-
+# Pacman environment implementation
 class EnvironmentManagerPacMan(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
                  resize_interpolation_mode, custom_rewards=None):
@@ -391,11 +401,12 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
                          resize_interpolation_mode, custom_rewards)
 
+        # Stores previous reward information
         self.prev_reward = 0
 
+        # Stores the most recent individual ghost positions, fixes disappearing ghost bug
         self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
                                      "pink_ghost": None, "yellow_ghost": None}
-
 
     def return_custom_screen(self, screen):
         screen_shape = screen.shape
@@ -409,81 +420,74 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         # As the colour scheme is relatively simple, each component of the pacman game has a specific RGB value
         # and when these values are summed together, each pixel has a unique float value between (0-3). Hence,
         # a series of conditions are employed which extract the specific components and store them in individual
-        # arrays, which relate to the RGB arrays. The benefit of this is that all the ghosts can be expressed
+        # arrays, which correspond to the RGB arrays. The benefit of this is that all the ghosts can be expressed
         # through the red dimension by setting that all pixels between certain values (the summed RGB values
-        # of the ghosts) are stored in the red array. This is also done for the pacman sprite as well as all
-        # the points and walls in the game
+        # of the ghosts) are stored in the red array. This is also done for the pacman sprite as well as vulnerable
+        # ghost positions (vulnerable ghosts are ghosts that can be 'eaten' by the pacman sprite)
 
+        # Note of the respective summed colour values for each component of the environment
         # Blue ghost: 1.65
         # Red ghost: 1.34
         # Pink ghost: 1.82
         # Yellow ghost: 1.37
         # Pacman ghost: 1.757
 
-        iteration = 2
+        # Ghosts array
+        ghost_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.4)) |
+                              ((resized_numpy > 1.6) & (resized_numpy <= 1.7)) |
+                              ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.01)
 
-        if iteration == 1:
-            # Ghosts array
-            red_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.74)) |
-                                  ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.0)
+        # Pacman array
+        pacman_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.01)
 
-            # Pacman array
-            green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.0)
+        # Vulnerable ghost array
+        vulnerable_ghosts_array = np.where((resized_numpy > 1.4) & (resized_numpy <= 1.5), 1.0, 0.01)
 
-            # Points and walls array
-            blue_array = np.where((resized_numpy > 1.76) & (resized_numpy <= 1.8), 1.0, 0.0)
-
-        else:
-            # Ghosts array
-            red_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.4)) |
-                                  ((resized_numpy > 1.6) & (resized_numpy <= 1.7)) |
-                                  ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.01)
-
-            # Pacman array
-            green_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.01)
-
-            # Vulnerable ghost array
-            blue_array = np.where((resized_numpy > 1.4) & (resized_numpy <= 1.5), 1.0, 0.01)
-
+        # Each individual ghost positions
         red_ghost_array = np.where((resized_numpy >= 1.33) & (resized_numpy <= 1.35), 1.0, 0.0)
         blue_ghost_array = np.where((resized_numpy >= 1.64) & (resized_numpy <= 1.66), 1.0, 0.0)
         pink_ghost_array = np.where((resized_numpy >= 1.81) & (resized_numpy <= 1.83), 1.0, 0.0)
         yellow_ghost_array = np.where((resized_numpy >= 1.36) & (resized_numpy <= 1.38), 1.0, 0.0)
 
-        is_vulnerable_ghosts = np.where(blue_array == 1.0)[0].size != 0
+        # Checks if there are any vulnerable ghosts currently in the environment state
+        is_vulnerable_ghosts = np.where(vulnerable_ghosts_array == 1.0)[0].size != 0
 
+        # If there are no vulnerable ghosts, then the state is checked to see if each hostile ghost is on the screen.
+        # If not, and the ghost was on screen before, then it means that the screen has glitched and is not properly
+        # showing the position of each ghost. Hence, the previously known position of each ghost is returned and
+        # added to the array. This makes the environment Markovian.
         if not is_vulnerable_ghosts:
             if np.where(red_ghost_array == 1.0)[0].size != 0:
                 self.last_ghost_positions["red_ghost"] = red_ghost_array
             elif self.last_ghost_positions["red_ghost"] is not None:
-                red_array = np.add(red_array, self.last_ghost_positions["red_ghost"])
-                red_array[red_array > 1.0] = 1.0
+                ghost_array = np.add(ghost_array, self.last_ghost_positions["red_ghost"])
+                ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(blue_ghost_array == 1.0)[0].size != 0:
                 self.last_ghost_positions["blue_ghost"] = blue_ghost_array
             elif self.last_ghost_positions["blue_ghost"] is not None:
-                red_array = np.add(red_array, self.last_ghost_positions["blue_ghost"])
-                red_array[red_array > 1.0] = 1.0
+                ghost_array = np.add(ghost_array, self.last_ghost_positions["blue_ghost"])
+                ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(pink_ghost_array == 1.0)[0].size != 0:
                 self.last_ghost_positions["pink_ghost"] = pink_ghost_array
             elif self.last_ghost_positions["pink_ghost"] is not None:
-                red_array = np.add(red_array, self.last_ghost_positions["pink_ghost"])
-                red_array[red_array > 1.0] = 1.0
+                ghost_array = np.add(ghost_array, self.last_ghost_positions["pink_ghost"])
+                ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(yellow_ghost_array == 1.0)[0].size != 0:
                 self.last_ghost_positions["yellow_ghost"] = yellow_ghost_array
             elif self.last_ghost_positions["yellow_ghost"] is not None:
-                red_array = np.add(red_array, self.last_ghost_positions["yellow_ghost"])
-                red_array[red_array > 1.0] = 1.0
+                ghost_array = np.add(ghost_array, self.last_ghost_positions["yellow_ghost"])
+                ghost_array[ghost_array > 1.0] = 1.0
 
         # Arrays are reshaped back to the original dimensions
-        red_array = red_array.reshape(1, screen_shape[1], screen_shape[2])
-        green_array = green_array.reshape(1, screen_shape[1], screen_shape[2])
-        blue_array = blue_array.reshape(1, screen_shape[1], screen_shape[2])
+        ghost_array = ghost_array.reshape(1, screen_shape[1], screen_shape[2])
+        pacman_array = pacman_array.reshape(1, screen_shape[1], screen_shape[2])
+        vulnerable_ghosts_array = vulnerable_ghosts_array.reshape(1, screen_shape[1], screen_shape[2])
 
         # Arrays are combined together to form the final screen image
-        final_array = np.concatenate((red_array, green_array, blue_array), axis=0)
+        final_array = np.concatenate((ghost_array, pacman_array, vulnerable_ghosts_array), axis=0)
 
         # Image is reshaped to form the same dimensions as the normal screen
         final_array = final_array.reshape(screen_shape[0], screen_shape[1], screen_shape[2])
@@ -494,21 +498,32 @@ class EnvironmentManagerPacMan(EnvironmentManager):
 
         return final_array
 
+    # The custom reward that is being implemented is the distance between pacman and the respective ghost spirits, with
+    # the main goal being to prioritise staying away from the ghosts.
     def return_custom_env_reward(self):
+
+        # Returns the closest distance between the pacman sprite and the closest ghost sprite
         def return_pac_distances(ghost_pixels):
 
+            # If pacman is not present on the screen, then automatically return a distance of 0
             if pac_man_pixels[0].size == 0 or pac_man_pixels[1].size == 0:
                 return 0
 
+            # Calculates the average horizontal and vertical position of the pacman sprite
             average_horizontal_pos = np.mean(pac_man_pixels[0])
             average_vertical_pos = np.mean(pac_man_pixels[1])
 
+            # Returns the horizontal and vertical distances between the pacman sprite and each of the ghost pixels
             horizontal_distances = np.absolute(np.subtract(ghost_pixels[0], average_horizontal_pos))
             vertical_distances = np.absolute(np.subtract(ghost_pixels[1], average_vertical_pos))
 
+            # The closest horizontal and vertical ghost pixel is returned
             closest_horizontal_distance = np.amin(horizontal_distances)
             closest_vertical_distance = np.amin(vertical_distances)
 
+            # TODO FIX
+
+            # Calculates the distance between pacman and the closest ghost sprite
             relative_distance = math.sqrt(closest_horizontal_distance ** 2 + closest_vertical_distance ** 2)
 
             return round(relative_distance, 1)
@@ -517,21 +532,35 @@ class EnvironmentManagerPacMan(EnvironmentManager):
 
         current_state = current_state.cpu().numpy()
 
+        # Returns pixels for each of the screen components: pacman, hostile ghosts and vulnerable ghosts
         pac_man_pixels = np.where(current_state[1] == 1.0)
 
         hostile_ghost_pixels = np.where((current_state[0] == 1.0))
 
         vulnerable_ghost_pixels = np.where((current_state[2] == 1.0))
 
+        # Deduces the max distance any two elements can be on the screen. Used for returning the reward for distance
+        # Pacman is from a vulnerable ghost
         max_distance = round(math.sqrt((current_state[0].shape[0] ** 2) + (current_state[0].shape[1] ** 2)), 1)
 
+        # Checks if there are not any hostile ghosts
         if hostile_ghost_pixels[0].size == 0 or hostile_ghost_pixels[1].size == 0:
+            # Checks if there are any vulnerable ghosts, if not, then a default reward of 0 is given as there are
+            # no hostile of vulnerable ghosts on the screen
             if vulnerable_ghost_pixels[0].size == 0 or vulnerable_ghost_pixels[1].size == 0:
                 return 0
-            pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels)) / 4
+
+            # Vulnerable ghost reward is given as the max distance between two sprites, subtracted by the distance
+            # between pacman and the closest vulnerable ghost, this will mean that pacman should favour transitioning
+            # towards vulnerable ghosts to obtain a high reward
+            pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels)) / 2
         else:
+            # The distances between pacman and the closest hostile ghost is used as the reward
             pac_man_distance_reward = return_pac_distances(hostile_ghost_pixels)
 
+        # Reward is then set as the difference between the current distance reward and the previous distance reward
+        # meaning that moving away from/towards the respective ghost will inherit a positive or negaitve reward based
+        # on the difference in distance
         prev_reward = self.prev_reward
         if not prev_reward:
             self.prev_reward = pac_man_distance_reward
@@ -542,6 +571,7 @@ class EnvironmentManagerPacMan(EnvironmentManager):
 
         return pac_man_distance_reward
 
+    # Sets ghost positions and prev_rewards to None as a new episode has started
     def set_custom_episode_reset_info(self):
         self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
                                      "pink_ghost": None, "yellow_ghost": None}

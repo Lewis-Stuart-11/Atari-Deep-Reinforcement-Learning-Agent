@@ -152,7 +152,7 @@
               "resize_interpolation_mode": "BILINEAR",
               "crop_values": {"percentage_crop_width": [0.05, 1], "percentage_crop_height":  [0.25, 0.73]},
               "screen_process_type": "standard",
-              "colour_type": "rgb",
+              "colour_type": "gray",
               "prev_states_queue_size": 1,
               "policy": "DQN_CNN_Advanced",
               "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 512]},

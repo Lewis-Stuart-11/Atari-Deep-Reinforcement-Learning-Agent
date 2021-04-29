@@ -12,12 +12,6 @@ from torch.nn import Softmax
 random.seed(0)
 
 
-# Deep Q network class
-# nn.Module- the base class for all neural networks. Hence all aspects of the neural network will
-# extend from the module class
-# Image height and width are needed as these will be the number of pixels passed in as a state
-
-
 # A normal deep QNetwork, takes in the image sizes and uses these as the inputs to the neural network
 class DQN(nn.Module):
     def __init__(self, img_height, img_width, num_actions, learning_technique):
@@ -322,6 +316,7 @@ class ReplayMemory():
     def current_memory_size(self):
         return len(self.memory)
 
+    # Returns all experiences from memory and resets experience array
     def return_all_and_clear_memory(self):
         all_memory = self.memory
         self.memory = []

@@ -25,7 +25,8 @@ OptimalParameters = namedtuple(
         'memory_size_start',  # The minimum memory size to start learning
         'target_update', # How many episodes before the target neural network should be updated with the policy networks weights
         'update_factor',  # How many steps per episode before performing a batch weight update
-        'reward_scheme'  # An dictionary of custom rewards for different situations
+        'reward_scheme',  # An dictionary of custom rewards for different situations
+        'improve_episode_factor'  # Defines how many episodes before optimising the policy (used for policy-gradient methods)
     )
 )
 
@@ -36,24 +37,29 @@ optimal_game_parameters = {}
 # Validates parameters that configure the agent, environment and policies
 def validate_game_parameters(game_parameters: OptimalParameters):
     # Valid values to set colour, policy and processing values
-    valid_colour_types = ["rgb", "gray", "binary"]
+    valid_colour_types = ["rgb", "gray"]
 
+    # Available neural networks to use and respective properties for each
     available_policies = {"DQN_CNN_Advanced": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 4},
                           "DQN_CNN_Basic": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3},
                           "DQN": {"neurons_per_layer": 3}}
 
+    # Processing screen types
     available_screen_processing_types = ["append", "difference", "standard", "morph"]
 
+    # Available strategies and respective properties for each
     available_strategies = {"epsilon greedy linear": ["start", "end", "decay_linear"],
                             "epsilon greedy linear advanced": ["start", "middle", "end", "decay_linear",
                                                                "end_decay_linear"],
                             "epsilon greedy reward": ["start", "end", "decay_linear", "reward_incrementation",
                                                       "reward_target", "reward_decay"]}
 
+    # The deep Q learning methods and policy gradient methods
     deep_q_learning_methods = ["DQL", "DDQL"]
     policy_gradient_methods = ["reinforce"]
 
-    resize_interpolation_modes = ["bilinear", "nearest", "bicubic"]
+    # Interpolation modes
+    avaliable_resize_interpolation_modes = ["bilinear", "nearest", "bicubic"]
 
     # Learning rate must be between 1-0
     if not (1 >= game_parameters.learning_rate > 0):
@@ -63,6 +69,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     if game_parameters.epsilon_strategy.lower() not in available_strategies.keys():
         raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies.keys()} ")
 
+    # Each strategy must contain all appropriate properties and each one must be of a valid value
     for epsilon_property in available_strategies[game_parameters.epsilon_strategy.lower()]:
         if epsilon_property not in game_parameters.epsilon_values.keys():
             raise ValueError(f"Epsilon strategy '{game_parameters.epsilon_strategy}' "
@@ -80,17 +87,20 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     if len(game_parameters.resize) != 2:
         raise ValueError(f"Resize image must be a two dimensional (only {len(game_parameters.resize)} values given")
 
+    # Resize values must be larger than 0
     if game_parameters.resize[0] <= 0 or game_parameters.resize[1] <= 0:
         raise ValueError(f"Resize image dimensions cannot be less than 0")
 
-    if game_parameters.resize_interpolation_mode.lower() not in resize_interpolation_modes:
-        raise ValueError(f"Resize Interpolation mode must be in set: {resize_interpolation_modes}")
+    # Interpolation mode must be from available options
+    if game_parameters.resize_interpolation_mode.lower() not in avaliable_resize_interpolation_modes:
+        raise ValueError(f"Resize Interpolation mode must be in set: {avaliable_resize_interpolation_modes}")
 
     # The crop values are a two dimensional array, each representing the percentage to crop the image, hence each must
     # dimension must have a size of two
     if len(game_parameters.crop_values) != 2:
         raise ValueError(f"Cropping values must include data for X and Y dimensions")
 
+    # Crop percentage values must contain a width and height, each with start and end crop values
     if len(game_parameters.crop_values["percentage_crop_width"]) != 2 or \
             len(game_parameters.crop_values["percentage_crop_height"]) != 2:
         raise ValueError(f"Cropping values must include percentages for both sides of X and Y dimension")
@@ -138,10 +148,11 @@ def validate_game_parameters(game_parameters: OptimalParameters):
         raise ValueError(f"Learning techniques must be one of the following available methods \
                         {policy_gradient_methods + deep_q_learning_methods}")
 
+    # Following properties are only required for Q-Learning methods
     if game_parameters.learning_technique in deep_q_learning_methods:
 
-        # The memory size must be larger than the batch size, so that the memory can return enough experiences to match the
-        # batch size parameter
+        # The memory size must be larger than the batch size, so that the memory can return enough experiences
+        # to match the batch size parameter
         if game_parameters.batch_size > game_parameters.memory_size:
             raise ValueError(f"Replay memory size must be larger than the batch size")
 
@@ -154,8 +165,8 @@ def validate_game_parameters(game_parameters: OptimalParameters):
         if not (1000000 >= game_parameters.memory_size > 50):
             raise ValueError(f"Replay memory size must be between 50 and 1,000,000")
 
-        # Memory learning start size must be in between the max replay size and 0, this is because the replay memory will
-        # only return experiences once the amount memory is greater than this value
+        # Memory learning start size must be in between the max replay size and 0, this is because the replay memory
+        # will only return experiences once the amount memory is greater than this value
         if game_parameters.memory_size_start > game_parameters.memory_size or game_parameters.memory_size_start < 0:
             raise ValueError(
                 f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
@@ -164,6 +175,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
         if not (100 >= game_parameters.target_update > 1):
             raise ValueError(f"Target update factor must be between 1 and 100")
 
+    # Following properties are only needed for policy-gradient methods
     else:
         if not(0 < game_parameters.improve_episode_factor < 100):
             raise ValueError(f"Improve episode factor must be between 0-100")
@@ -171,6 +183,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Iterates through the reward scheme settings and checks each one is of the correct type
     bool_reward_types = ["use_given_reward", "one_life_game", "normalise_rewards", "end_on_negative"]
 
+    # Checks that each environment reward parameter is boolean
     for reward_type in bool_reward_types:
         if reward_type in game_parameters.reward_scheme.keys():
             if type(game_parameters.reward_scheme[reward_type]) is not bool:
@@ -180,6 +193,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
     float_types = ["lives_change_reward"]
 
+    # Checks that each environment reward parameter is a float
     for reward_type in float_types:
         if reward_type in game_parameters.reward_scheme.keys():
             if type(game_parameters.reward_scheme[reward_type]) is not float and \
@@ -189,19 +203,25 @@ def validate_game_parameters(game_parameters: OptimalParameters):
             raise ValueError(f"Reward scheme: {reward_type} cannot be found")
 
 
+# Retrieves game parameters from JSON files
 def retrieve_game_parameters(atari_game: str, index: int):
+
+    # Opens game parameter JSON file
     with open("game_parameters.json", "r") as settings_json_file:
         parameter_handler = json.load(settings_json_file)
 
+    # Checks if requested Atari game has the available parameters
     if atari_game not in parameter_handler:
         raise ValueError(f"Game parameters for {atari_game} could not be found")
 
     parameter_list = parameter_handler[atari_game]
 
+    # Checks that the parameter index for that game exists
     if index >= len(parameter_list) or index < 0:
         raise ValueError(
             f"Parameter index out of range, only {len(parameter_list)} parameter entries exist for the game {atari_game}")
 
+    # Converts dictionary to a named tuple
     dict_game_parameters = parameter_list[str(index)]
 
     parameterConstructor = namedtuple('Game_Parameter_Tuple', ' '.join(dict_game_parameters.keys()))

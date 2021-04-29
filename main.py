@@ -134,6 +134,7 @@ def extract_tensors(experiences):
 def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Available methods
     deep_q_learning_methods = ["DQL", "DDQL"]
     policy_gradient_methods = ["reinforce"]
 
@@ -187,6 +188,7 @@ def train_Q_agent(em, agent):
     else:
         raise Exception("Policy and target networks not established")
 
+    # Sets parameters for Deep Q Learning methods
     if learning_technique in deep_q_learning_methods:
         # Sets the weights and biases to be the same for both networks
         target_net.load_state_dict(policy_net.state_dict())
@@ -206,6 +208,7 @@ def train_Q_agent(em, agent):
         # How often to improve the neural network weights (how many steps per episode to update)
         improve_step_factor = agent_parameters.update_factor
 
+    # Sets parameters for Policy Gradient methods
     elif learning_technique in policy_gradient_methods:
         target_net = None
 
@@ -271,7 +274,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if show_processed_screens and (step % 20 == 0):
+            if show_processed_screens and (step % 400 == 0):
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -282,7 +285,6 @@ def train_Q_agent(em, agent):
 
                 display_processed_screens(next_state_screen, state_screen_cmap, step)
                 display_processed_screens(em.render('rgb_array'), state_screen_cmap, step)
-
 
             # If set, renders the environment on the screen
             if render_agent_factor and episode+1 >= render_agent_factor:

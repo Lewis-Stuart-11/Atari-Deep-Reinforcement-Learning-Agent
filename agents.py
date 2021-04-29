@@ -21,6 +21,7 @@ class Agent():
     # Chooses the new action to take for the agent
     def select_action(self, state, policy_net, episode, reward):
 
+        # Returns exploration rate
         rate = self.strategy.get_exploration_rate(episode, reward) if self.strategy.use_reward else \
             self.strategy.get_exploration_rate(episode)
 
@@ -28,7 +29,7 @@ class Agent():
         if rate > random.random():
             return self.select_random_action()
 
-        # Chooses the most optimal action, exploiting the neural network
+        # Chooses the most optimal action, exploiting the policy
         else:
             return self.select_exploitative_action(state, policy_net)
 
