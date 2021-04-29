@@ -40,9 +40,9 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     valid_colour_types = ["rgb", "gray"]
 
     # Available neural networks to use and respective properties for each
-    available_policies = {"DQN_CNN_Advanced": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 4},
-                          "DQN_CNN_Basic": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3},
-                          "DQN": {"neurons_per_layer": 3}}
+    available_policies = {"CNN_Advanced": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 4},
+                          "CNN_Basic": {"kernel_sizes": 3, "strides": 3, "neurons_per_layer": 3},
+                          "DNN_Basic": {"neurons_per_layer": 3}}
 
     # Processing screen types
     available_screen_processing_types = ["append", "difference", "standard", "morph"]

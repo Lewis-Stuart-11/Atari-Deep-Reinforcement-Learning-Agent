@@ -12,8 +12,8 @@ from torch.nn import Softmax
 random.seed(0)
 
 
-# A normal deep QNetwork, takes in the image sizes and uses these as the inputs to the neural network
-class DQN(nn.Module):
+# A normal deep neural network, takes in the image sizes and uses these as the inputs to the neural network
+class BasicDeepNN(nn.Module):
     def __init__(self, img_height, img_width, num_actions, learning_technique):
         super().__init__()
 
@@ -36,6 +36,8 @@ class DQN(nn.Module):
         t = F.relu(self.fc1(t))
         t = F.relu(self.fc2(t))
         t = F.relu(self.fc3(t))
+
+        # Returns softmax probabilities for policy gradient methods, else returns normal Q values
         if self.learning_technique in ["reinforce"]:
             t = F.softmax(t, 1)
         t = self.out(t)
@@ -43,9 +45,9 @@ class DQN(nn.Module):
 
 
 # A deep neural network with convoluted layers to process the image
-class DQN_CNN_Basic(nn.Module):
+class BasicCNN(nn.Module):
     def __init__(self, h, w, outputs, input_channels, nn_structure: dict, learning_technique):
-        super(DQN_CNN_Basic, self).__init__()
+        super(BasicCNN, self).__init__()
 
         self.learning_technique = learning_technique
 
@@ -87,13 +89,15 @@ class DQN_CNN_Basic(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
+
+        # Returns softmax probabilities for policy gradient methods, else returns normal Q values
         if self.learning_technique in ["reinforce"]:
             x = F.softmax(x, -1)
         return self.head(x.view(x.size(0), -1))
 
 
 # More complex CNN with multiple linear layers
-class DQN_CNN_Advanced(nn.Module):
+class AdvancedCNN(nn.Module):
     def __init__(self, h, w, outputs, input_channels, nn_structure: dict, learning_technique):
         super().__init__()
 
@@ -122,11 +126,14 @@ class DQN_CNN_Advanced(nn.Module):
         # Head input size
         linear_input_size = convw * convh * neurons_per_layer[2]
 
+        # Fully connected layer, outputs Q values
         if learning_technique in ["DQL", "DDQL"]:
             self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
                                             nn.ReLU(True),
                                             nn.Linear(neurons_per_layer[3], outputs)
-                                            )
+                                          )
+
+        # Fully connected layer, outputs softmax probabilities
         elif learning_technique in ["reinforce"]:
             self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
                                             nn.ReLU(True),
@@ -137,8 +144,10 @@ class DQN_CNN_Advanced(nn.Module):
             raise ValueError("Learning technique undefined")
 
     def forward(self, x):
+        # Convoluted layers
         x = self.cnn(x)
 
+        # Fully connected layer
         x = torch.flatten(x, start_dim=1)
         x = self.classifier(x)
         return x
@@ -155,22 +164,20 @@ def initialise_weights(model):
 class QValues:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Method can be called without creating an instance of the class
     @staticmethod
-    # Takes the state action pairs and returns the predicted Q-Values from the policy network that
-    # were passed in
+    # Takes the state action pairs and returns the predicted Q-Values from the policy network
     def get_current(policy_net, states, actions):
         return policy_net(states).gather(dim=1, index=actions.unsqueeze(-1))
 
+    # Returns DQL next states
     @staticmethod
-    # Accepts the target network and next states
-    def get_next(target_net, next_states):
+    def get_next_DQL(target_net, next_states):
 
         # The latest state in the batch
         last_screens_of_state = next_states[:, -1, :, :]
 
         # Finds the locations of all the final states (these are the states that occur after the
-        # the state is occured that ended the episode)
+        # the state is occurred that ended the episode)
         # In this context, a final state is a state that represents an all black screen
         # Hence all the final states are found (if there are any in a given batch), so that it is known
         # not to pass these final states to the target network to get a predicted value. These final states
@@ -200,12 +207,16 @@ class QValues:
         # These Q values are then returned
         return values
 
+    # Returns Double Deep Q Learning next states
     @staticmethod
-    def get_next_DDQN(policy_net, target_net, next_states):
+    def get_next_DDQL(policy_net, target_net, next_states):
         last_screens_of_state = next_states[:, -1, :, :]
+
         final_state_locations = last_screens_of_state.flatten(start_dim=1).max(dim=1)[0].eq(0).type(torch.bool)
+
+        # All non-final state_locations are the opposites of the final state locations
         non_final_state_locations = (final_state_locations == False)
-        non_final_states = next_states[non_final_state_locations]  # (B',4,H,W)
+        non_final_states = next_states[non_final_state_locations]
 
         # Finds the batch size by checking to see how many next states are in the next states tensor
         batch_size = next_states.shape[0]
@@ -213,7 +224,6 @@ class QValues:
         # Creates a list of QValues equal to the batch size
         values = torch.zeros(batch_size).to(QValues.device)
 
-        # BZX: different from DQN
         with torch.no_grad():
             # Find the max actions from the policy net
             argmax_a = policy_net(non_final_states).detach().max(dim=1)[1]
@@ -223,15 +233,16 @@ class QValues:
                                                                                                  -1)).squeeze(-1)
         return values
 
+    # Returns target Q values
     @staticmethod
     def get_target_Q_Values(policy_net, target_net, next_states, discount, rewards, learning_technique):
 
         # Extracts next Q values of the best corresponding actions of the target network
         # The target network is used for finding the next best actions
         if learning_technique == "DQL":
-            next_q_values = QValues.get_next(target_net, next_states)
+            next_q_values = QValues.get_next_DQL(target_net, next_states)
         elif learning_technique == "DDQL":
-            next_q_values = QValues.get_next_DDQN(policy_net, target_net, next_states)
+            next_q_values = QValues.get_next_DDQL(policy_net, target_net, next_states)
         else:
             raise ValueError("Learning technique not defined")
 
@@ -241,7 +252,10 @@ class QValues:
         return target_q_values
 
 
+# Class for all property gradient methods
 class PolicyGradient:
+
+    # Returns policy loss
     @staticmethod
     def get_policy_gradient_loss(policy_net, states, actions, rewards, discount, learning_technique):
         if learning_technique == "reinforce":
@@ -250,6 +264,7 @@ class PolicyGradient:
             raise ValueError("Learning technique not defined")
         return loss
 
+    # Returns reinforce loss
     @staticmethod
     def get_reinforce_loss(policy_net, states, actions, rewards, discount):
 
@@ -286,7 +301,7 @@ Experience = namedtuple(
 )
 
 
-# Stores all the previous experiences and is used for helping the agent learn
+# Stores all the previous experiences and are returned when optimising policy
 class ReplayMemory():
     def __init__(self, capacity, start_size):
         self.capacity = capacity
@@ -309,7 +324,7 @@ class ReplayMemory():
         return random.sample(self.memory, batch_size)
 
     # Checks if a sample can be provided, the amount of experiences in memory must be larger than the
-    # Batch size, and the memory must be at least 1/10 full of experiences
+    # Batch size, and the memory must have experiences greater than the start size
     def can_provide_sample(self, batch_size):
         return len(self.memory) >= batch_size and len(self.memory) >= self.start_size
 

@@ -148,42 +148,42 @@ def train_Q_agent(em, agent):
     learning_technique = agent_parameters.learning_technique
 
     # Uses a deep neural network (without convolution layers)
-    if agent_parameters.policy == "DQN":
+    if agent_parameters.policy == "DNN_Basic":
         # Sets up input sizes for the networks
-        policy_net = DQN(screen_height, screen_width, em.num_actions_available(),
-                         learning_technique).to(device)
+        policy_net = BasicDeepNN(screen_height, screen_width, em.num_actions_available(),
+                                 learning_technique).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
         if learning_technique in deep_q_learning_methods:
-            target_net = DQN(screen_height, screen_width, em.num_actions_available(),
-                             learning_technique).to(device)
+            target_net = BasicDeepNN(screen_height, screen_width, em.num_actions_available(),
+                                     learning_technique).to(device)
 
     # Uses a deep neural network (with convolution layers)
-    elif agent_parameters.policy == "DQN_CNN_Basic":
+    elif agent_parameters.policy == "CNN_Basic":
         # Establishes Policy and Target networks
-        policy_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
-                                   agent_parameters.policy_parameters, learning_technique).to(device)
+        policy_net = BasicCNN(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
+                              agent_parameters.policy_parameters, learning_technique).to(device)
 
         # Sets default weights
         policy_net.apply(initialise_weights)
 
         if learning_technique in deep_q_learning_methods:
-            target_net = DQN_CNN_Basic(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
-                                       agent_parameters.policy_parameters, learning_technique).to(device)
+            target_net = BasicCNN(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
+                                  agent_parameters.policy_parameters, learning_technique).to(device)
 
-    elif agent_parameters.policy == "DQN_CNN_Advanced":
-        policy_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
-                                      em.num_actions_available(), em.num_tensor_outputs,
-                                      agent_parameters.policy_parameters, learning_technique).to(device)
+    elif agent_parameters.policy == "CNN_Advanced":
+        policy_net = AdvancedCNN(em.get_screen_height(), em.get_screen_width(),
+                                 em.num_actions_available(), em.num_tensor_outputs,
+                                 agent_parameters.policy_parameters, learning_technique).to(device)
 
         policy_net.apply(initialise_weights)
 
         if learning_technique in deep_q_learning_methods:
-            target_net = DQN_CNN_Advanced(em.get_screen_height(), em.get_screen_width(),
-                                          em.num_actions_available(), em.num_tensor_outputs,
-                                          agent_parameters.policy_parameters, learning_technique).to(device)
+            target_net = AdvancedCNN(em.get_screen_height(), em.get_screen_width(),
+                                     em.num_actions_available(), em.num_tensor_outputs,
+                                     agent_parameters.policy_parameters, learning_technique).to(device)
 
     else:
         raise Exception("Policy and target networks not established")
@@ -655,19 +655,19 @@ def test(policy_name: str):
 
     if agent_parameters.policy == "DQN":
         # Sets up input sizes for the networks
-        test_net = DQN(test_em.get_screen_height(), test_em.get_screen_width(), test_em.num_actions_available()).to(
+        test_net = BasicDeepNN(test_em.get_screen_height(), test_em.get_screen_width(), test_em.num_actions_available()).to(
             device)
 
         # Uses a deep neural network (with convolution layers)
     elif optimal_game_parameters[running_atari_game].policy == "DQN_CNN":
         # Establishes Policy and Target networks
-        test_net = DQN_CNN_Basic(test_em.get_screen_height(), test_em.get_screen_width(),
-                                 test_em.num_actions_available(), input_channels,
-                                 agent_parameters.policy_parameters).to(device)
+        test_net = BasicCNN(test_em.get_screen_height(), test_em.get_screen_width(),
+                            test_em.num_actions_available(), input_channels,
+                            agent_parameters.policy_parameters).to(device)
 
-    test_net = DQN_CNN_Advanced(test_em.get_screen_height(), test_em.get_screen_width(),
-                                test_em.num_actions_available(), input_channels,
-                                agent_parameters.policy_parameters).to(device)
+    test_net = AdvancedCNN(test_em.get_screen_height(), test_em.get_screen_width(),
+                           test_em.num_actions_available(), input_channels,
+                           agent_parameters.policy_parameters).to(device)
 
     storage = torch.load(f"network_weights/{policy_name}")
     if not storage:
@@ -818,7 +818,7 @@ def main(arguements):
     # Attempts to load in a previous deep Q network
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        policy_net = DQN(em.get_screen_height(), em.get_screen_width(), em.num_actions_available()).to(device)
+        policy_net = BasicDeepNN(em.get_screen_height(), em.get_screen_width(), em.num_actions_available()).to(device)
 
         # Attempts to load the specific game DQN
         storage = torch.load(f"network_weights/{running_atari_game}_Policy_Network_Final")
