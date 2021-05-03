@@ -333,6 +333,7 @@ class EnvironmentManager(ABC):
         screen = torch.from_numpy(screen)
 
         # If the colour is RGB, resize with colour
+        # Found bug where sometimes a dimension is dropped
         if self.colour_type == "rgb":
             resize = T.Compose([
                 T.ToPILImage(),  # Firstly tensor is converted to a PIL image
@@ -343,11 +344,10 @@ class EnvironmentManager(ABC):
 
         # Otherwise, resize with no colour
         else:
-            # Use torchvision package to compose image transforms
             resize = T.Compose([
                 T.ToPILImage(),  # Firstly tensor is converted to a PIL image
                 T.Resize((self.resize[0], self.resize[1]), interpolation=self.resize_interpolation_mode),
-                # Resized to the size specified by the resize property
+                # Resized to the size specified by the resize property with correct interpolation mode
                 T.Grayscale(num_output_channels=1),  # Sets the image to grayscale
                 T.ToTensor()  # Transformed to a tensor
             ])
@@ -393,6 +393,7 @@ class EnvironmentManagerGeneral(EnvironmentManager):
     def set_custom_episode_reset_info(self):
         pass
 
+
 # Pacman environment implementation
 class EnvironmentManagerPacMan(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
@@ -405,8 +406,10 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         self.prev_reward = 0
 
         # Stores the most recent individual ghost positions, fixes disappearing ghost bug
-        self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+        self.last_hostile_ghost_positions = {"red_ghost": None, "blue_ghost": None,
                                      "pink_ghost": None, "yellow_ghost": None}
+
+        self.steps_since_vulnerable = {"screen": None, "steps": 0}
 
     def return_custom_screen(self, screen):
         screen_shape = screen.shape
@@ -432,11 +435,6 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         # Yellow ghost: 1.37
         # Pacman ghost: 1.757
 
-        # Ghosts array
-        ghost_array = np.where((((resized_numpy > 1.2) & (resized_numpy <= 1.4)) |
-                              ((resized_numpy > 1.6) & (resized_numpy <= 1.7)) |
-                              ((resized_numpy > 1.8) & (resized_numpy <= 3))), 1.0, 0.01)
-
         # Pacman array
         pacman_array = np.where((resized_numpy > 1.74) & (resized_numpy <= 1.76), 1.0, 0.01)
 
@@ -444,42 +442,82 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         vulnerable_ghosts_array = np.where((resized_numpy > 1.4) & (resized_numpy <= 1.5), 1.0, 0.01)
 
         # Each individual ghost positions
-        red_ghost_array = np.where((resized_numpy >= 1.33) & (resized_numpy <= 1.35), 1.0, 0.0)
-        blue_ghost_array = np.where((resized_numpy >= 1.64) & (resized_numpy <= 1.66), 1.0, 0.0)
-        pink_ghost_array = np.where((resized_numpy >= 1.81) & (resized_numpy <= 1.83), 1.0, 0.0)
-        yellow_ghost_array = np.where((resized_numpy >= 1.36) & (resized_numpy <= 1.38), 1.0, 0.0)
+        red_ghost_array = np.where((resized_numpy >= 1.33) & (resized_numpy <= 1.35), 1.0, 0.0025)
+        blue_ghost_array = np.where((resized_numpy >= 1.64) & (resized_numpy <= 1.66), 1.0, 0.0025)
+        pink_ghost_array = np.where((resized_numpy >= 1.81) & (resized_numpy <= 1.83), 1.0, 0.0025)
+        yellow_ghost_array = np.where((resized_numpy >= 1.36) & (resized_numpy <= 1.38), 1.0, 0.0025)
+
+        # Ghosts array
+        ghost_array = np.add(red_ghost_array, blue_ghost_array)
+        ghost_array = np.add(ghost_array, pink_ghost_array)
+        ghost_array = np.add(ghost_array, yellow_ghost_array)
+
+        # Vulnerable ghosts that are about to turn to normal hostile ghosts
+        vulnerability_ending_ghosts = np.where((resized_numpy >= 2.4) & (resized_numpy <= 2.6), 1.0, 0.01)
+
+        is_vulnerable_ending = np.where(vulnerability_ending_ghosts > 0.01)[0].size != 0
 
         # Checks if there are any vulnerable ghosts currently in the environment state
-        is_vulnerable_ghosts = np.where(vulnerable_ghosts_array == 1.0)[0].size != 0
+        is_vulnerable_ghosts = np.where(vulnerable_ghosts_array > 0.01)[0].size != 0
 
         # If there are no vulnerable ghosts, then the state is checked to see if each hostile ghost is on the screen.
         # If not, and the ghost was on screen before, then it means that the screen has glitched and is not properly
         # showing the position of each ghost. Hence, the previously known position of each ghost is returned and
         # added to the array. This makes the environment Markovian.
-        if not is_vulnerable_ghosts:
+        if not is_vulnerable_ghosts and not is_vulnerable_ending and self.steps_since_vulnerable["steps"] == 0:
             if np.where(red_ghost_array == 1.0)[0].size != 0:
-                self.last_ghost_positions["red_ghost"] = red_ghost_array
-            elif self.last_ghost_positions["red_ghost"] is not None:
-                ghost_array = np.add(ghost_array, self.last_ghost_positions["red_ghost"])
+                self.last_hostile_ghost_positions["red_ghost"] = red_ghost_array
+            elif self.last_hostile_ghost_positions["red_ghost"] is not None:
+                ghost_array = np.add(ghost_array, self.last_hostile_ghost_positions["red_ghost"])
                 ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(blue_ghost_array == 1.0)[0].size != 0:
-                self.last_ghost_positions["blue_ghost"] = blue_ghost_array
-            elif self.last_ghost_positions["blue_ghost"] is not None:
-                ghost_array = np.add(ghost_array, self.last_ghost_positions["blue_ghost"])
+                self.last_hostile_ghost_positions["blue_ghost"] = blue_ghost_array
+            elif self.last_hostile_ghost_positions["blue_ghost"] is not None:
+                ghost_array = np.add(ghost_array, self.last_hostile_ghost_positions["blue_ghost"])
                 ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(pink_ghost_array == 1.0)[0].size != 0:
-                self.last_ghost_positions["pink_ghost"] = pink_ghost_array
-            elif self.last_ghost_positions["pink_ghost"] is not None:
-                ghost_array = np.add(ghost_array, self.last_ghost_positions["pink_ghost"])
+                self.last_hostile_ghost_positions["pink_ghost"] = pink_ghost_array
+            elif self.last_hostile_ghost_positions["pink_ghost"] is not None:
+                ghost_array = np.add(ghost_array, self.last_hostile_ghost_positions["pink_ghost"])
                 ghost_array[ghost_array > 1.0] = 1.0
 
             if np.where(yellow_ghost_array == 1.0)[0].size != 0:
-                self.last_ghost_positions["yellow_ghost"] = yellow_ghost_array
-            elif self.last_ghost_positions["yellow_ghost"] is not None:
-                ghost_array = np.add(ghost_array, self.last_ghost_positions["yellow_ghost"])
+                self.last_hostile_ghost_positions["yellow_ghost"] = yellow_ghost_array
+            elif self.last_hostile_ghost_positions["yellow_ghost"] is not None:
+                ghost_array = np.add(ghost_array, self.last_hostile_ghost_positions["yellow_ghost"])
                 ghost_array[ghost_array > 1.0] = 1.0
+
+        # If the ghosts are about to stop being vulnerable, consider them as normal hostile ghosts. Sets a
+        # step since vulnerable ghost to be around 8 steps, this means that if the ghost turns blue again (as it flashes
+        # white and blue when about to turn hostile), still consider the last position as hostile
+        elif is_vulnerable_ending:
+            ghost_array = vulnerability_ending_ghosts
+            self.steps_since_vulnerable["steps"] = 5
+            self.steps_since_vulnerable["screen"] = ghost_array
+            vulnerable_ghosts_array = np.full(resized_numpy.shape, 0.01)
+
+        # If there are vulnerable ghosts, any hostile ghosts (including ghost eyes) are ignored
+        else:
+            # Ghost position is set to None as ghosts would have moved far from their original respective positions
+            self.last_hostile_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+                                                 "pink_ghost": None, "yellow_ghost": None}
+
+            # If the ghost is still about to turn hostile, so it on the map and remove any current vulnerable ghosts
+            if self.steps_since_vulnerable["steps"] > 0:
+                if not is_vulnerable_ghosts:
+                    ghost_array = self.steps_since_vulnerable["screen"]
+                else:
+                    ghost_array = vulnerable_ghosts_array
+                    self.steps_since_vulnerable["screen"] = ghost_array
+                vulnerable_ghosts_array = np.full(resized_numpy.shape, 0.01)
+            else:
+                ghost_array = np.full(resized_numpy.shape, 0.01)
+
+        # Decreases steps since vulnerability
+        if self.steps_since_vulnerable["steps"] > 0:
+            self.steps_since_vulnerable["steps"] -= 1
 
         # Arrays are reshaped back to the original dimensions
         ghost_array = ghost_array.reshape(1, screen_shape[1], screen_shape[2])
@@ -523,6 +561,9 @@ class EnvironmentManagerPacMan(EnvironmentManager):
             # The closest distance is returned
             closest_relative_distance = np.amin(relative_distances)
 
+            # Numpy float to native Python float
+            closest_relative_distance = np.float32(closest_relative_distance).item()
+
             return round(closest_relative_distance, 1)
 
         current_state = self.state_queue[-1].squeeze(0)
@@ -530,11 +571,11 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         current_state = current_state.cpu().numpy()
 
         # Returns pixels for each of the screen components: pacman, hostile ghosts and vulnerable ghosts
-        pac_man_pixels = np.where(current_state[1] == 1.0)
+        pac_man_pixels = np.where(current_state[1] >= 0.3)
 
-        hostile_ghost_pixels = np.where((current_state[0] == 1.0))
+        hostile_ghost_pixels = np.where((current_state[0] >= 0.3))
 
-        vulnerable_ghost_pixels = np.where((current_state[2] == 1.0))
+        vulnerable_ghost_pixels = np.where((current_state[2] >= 0.3))
 
         # Deduces the max distance any two elements can be on the screen. Used for returning the reward for distance
         # Pacman is from a vulnerable ghost
@@ -551,6 +592,7 @@ class EnvironmentManagerPacMan(EnvironmentManager):
             # between pacman and the closest vulnerable ghost, this will mean that pacman should favour transitioning
             # towards vulnerable ghosts to obtain a high reward
             pac_man_distance_reward = (max_distance - return_pac_distances(vulnerable_ghost_pixels)) / 2
+
         else:
             # The distances between pacman and the closest hostile ghost is used as the reward
             pac_man_distance_reward = return_pac_distances(hostile_ghost_pixels)
@@ -558,8 +600,12 @@ class EnvironmentManagerPacMan(EnvironmentManager):
         # Reward is then set as the difference between the current distance reward and the previous distance reward
         # meaning that moving away from/towards the respective ghost will inherit a positive or negaitve reward based
         # on the difference in distance
+
         prev_reward = self.prev_reward
         if not prev_reward:
+            self.prev_reward = pac_man_distance_reward
+            return 0
+        elif prev_reward == 0 or pac_man_distance_reward == 0:
             self.prev_reward = pac_man_distance_reward
             return 0
         else:
@@ -570,8 +616,8 @@ class EnvironmentManagerPacMan(EnvironmentManager):
 
     # Sets ghost positions and prev_rewards to None as a new episode has started
     def set_custom_episode_reset_info(self):
-        self.last_ghost_positions = {"red_ghost": None, "blue_ghost": None,
-                                     "pink_ghost": None, "yellow_ghost": None}
+        self.last_hostile_ghost_positions = {"red_ghost": None, "blue_ghost": None,
+                                             "pink_ghost": None, "yellow_ghost": None}
 
         self.prev_reward = None
 

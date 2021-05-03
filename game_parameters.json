@@ -92,7 +92,7 @@
           }
       },
 
-  "MsPacmanDeterministic-v0":
+  "MsPacmanDeterministic-v4":
       {
         "0": {
               "learning_technique": "DQL",
@@ -137,6 +137,50 @@
               "update_factor": 10,
               "reward_scheme": {"use_given_reward": false, "lives_change_reward": 0, "one_life_game": true,
                                 "normalise_rewards": false, "end_on_negative": false, "use_custom_env_rewards": true}
+        },
+        "2": {
+              "learning_technique": "DQL",
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Linear Advanced",
+              "epsilon_values": {"start": 1, "middle": 0.1, "end": 0.01, "decay_linear": 0.0001, "end_decay_linear": 1e-06},
+              "discount": 0.999,
+              "resize": [100, 90],
+              "resize_interpolation_mode": "BILINEAR",
+              "crop_values": {"percentage_crop_width": [0, 1], "percentage_crop_height":  [0.01, 0.81]},
+              "screen_process_type": "standard",
+              "colour_type": "rgb",
+              "prev_states_queue_size": 1,
+              "policy": "CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 512]},
+              "batch_size": 50,
+              "memory_size": 25000,
+              "memory_size_start": 5000,
+              "target_update": 4,
+              "update_factor": 10,
+              "reward_scheme": {"use_given_reward": false, "lives_change_reward": 0, "one_life_game": true,
+                                "normalise_rewards": false, "end_on_negative": false, "use_custom_env_rewards": true}
+        },
+        "3": {
+              "learning_technique": "DQL",
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Linear Advanced",
+              "epsilon_values": {"start": 1, "middle": 0.1, "end": 0.01, "decay_linear": 0.0004, "end_decay_linear": 1e-06},
+              "discount": 0.999,
+              "resize": [100, 90],
+              "resize_interpolation_mode": "BILINEAR",
+              "crop_values": {"percentage_crop_width": [0, 1], "percentage_crop_height":  [0.01, 0.81]},
+              "screen_process_type": "standard",
+              "colour_type": "rgb",
+              "prev_states_queue_size": 1,
+              "policy": "CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 512]},
+              "batch_size": 15,
+              "memory_size": 25000,
+              "memory_size_start": 5000,
+              "target_update": 2,
+              "update_factor": 3,
+              "reward_scheme": {"use_given_reward": false, "lives_change_reward": 0, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false, "use_custom_env_rewards": true}
         }
       },
 
@@ -146,7 +190,7 @@
               "learning_technique": "DQL",
               "learning_rate": 5e-05,
               "epsilon_strategy": "Epsilon Greedy Linear Advanced",
-              "epsilon_values": {"start": 1, "middle": 0.1, "end": 0.01, "decay_linear": 0.002, "end_decay_linear": 0.0001},
+              "epsilon_values": {"start": 1, "middle": 0.15, "end": 0.01, "decay_linear": 0.0008, "end_decay_linear": 0.0001},
               "discount": 0.995,
               "resize": [100, 90],
               "resize_interpolation_mode": "BILINEAR",

@@ -35,11 +35,13 @@ class BasicDeepNN(nn.Module):
         # Tensor is passed through each layer
         t = F.relu(self.fc1(t))
         t = F.relu(self.fc2(t))
-        t = F.relu(self.fc3(t))
 
         # Returns softmax probabilities for policy gradient methods, else returns normal Q values
         if self.learning_technique in ["reinforce"]:
+            t = self.fc3(t)
             t = F.softmax(t, 1)
+        else:
+            t = F.relu(self.fc3(t))
         t = self.out(t)
         return t
 
@@ -92,7 +94,10 @@ class BasicCNN(nn.Module):
 
         # Returns softmax probabilities for policy gradient methods, else returns normal Q values
         if self.learning_technique in ["reinforce"]:
+            x = self.bn3(self.conv3(x))
             x = F.softmax(x, -1)
+        else:
+            x = F.relu(self.bn3(self.conv3(x)))
         return self.head(x.view(x.size(0), -1))
 
 

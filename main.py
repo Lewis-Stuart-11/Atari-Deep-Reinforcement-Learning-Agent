@@ -274,7 +274,7 @@ def train_Q_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if show_processed_screens and (step % 400 == 0):
+            if show_processed_screens and episode == 1 and step > 200:
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -616,6 +616,7 @@ def print_agent_information(em):
         print()
         print(f"\tEpisodes to update target network (with policy network): {agent_parameters.target_update}")
         print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
+        print(f"\tExperience batch size: {agent_parameters.batch_size}")
     else:
         print(f"Episode update factor: {agent_parameters.improve_episode_factor}")
     print()
@@ -700,7 +701,7 @@ def return_env_with_atari_game(atari_game):
 
         resize_interpolation_mode = agent_parameters.resize_interpolation_mode
 
-        if atari_game == "MsPacmanDeterministic-v0":
+        if atari_game == "MsPacmanDeterministic-v4":
             em = EnvironmentManagerPacMan(atari_game, [crop_width, crop_height], resize, screen_process_type,
                                     prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
         elif atari_game == "EnduroDeterministic-v0":

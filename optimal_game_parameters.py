@@ -172,7 +172,7 @@ def validate_game_parameters(game_parameters: OptimalParameters):
                 f"Replay memory start size must be less than the maximum memory size and greater or equal to 0")
 
         # The target update should be small enough that the policy and target networks update enough
-        if not (100 >= game_parameters.target_update > 1):
+        if not (100 >= game_parameters.target_update > 0):
             raise ValueError(f"Target update factor must be between 1 and 100")
 
     # Following properties are only needed for policy-gradient methods
