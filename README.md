@@ -35,5 +35,6 @@ How to run:
 5. A series of parameters for the different games have been set in the 'optimal_game_parameters' file, thescan be edited and rune can be edited and run.
 ## Performance
 #### Breakout
-![Alt Text](https://media.giphy.com/media/csj5usnHg2u6rUwhzv/giphy.gif)
-
+![Break Out Performance](https://media.giphy.com/media/csj5usnHg2u6rUwhzv/giphy.gif)
+#### Enduro
+![Enduro Performance](https://media3.giphy.com/media/xRCi9lbXAsm8gLMDW8/giphy.gif)
