@@ -17,7 +17,7 @@ to ensure it is in the correct format
 How to run:
 1. Install the following required modules:
 	* PyTorch
-	* Torchvis
+	* Torchvision
 	* Numpy
 	* Gym
 	* Atari_py
