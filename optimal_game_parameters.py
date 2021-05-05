@@ -3,30 +3,34 @@
 from collections import namedtuple
 import json
 
+# Imports the names of all current available policies for referencing
+from avaliable_policy_methods import *
+
 # A template of the game parameters stored in the respective JSON file. Each of the features is explained below
 OptimalParameters = namedtuple(
     'OptimalParameters',
     (
         'learning_technique',  # Whether to use Policy gradient or Deep Q Learning
         'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
-        'epsilon_strategy',  # The strategy for returning the epsilon values
-        'epsilon_values',  # Exploration vs Exploration values
+        'epsilon_strategy',  # The employed strategy for exploration/exploitation of the environment
+        'epsilon_values',  # Epsilon values
         'discount',  # How impactful future rewards are
         'resize',  # The final size of the screen to enter into the neural network
-        'resize_interpolation_mode', # The pixel conversion technique for resizing the image
-        'crop_values',  # Crop values to shrink down the size of the screen
+        'resize_interpolation_mode',  # The pixel conversion technique for resizing the image
+        'crop_values',  # Crop values to reduce the size of the screen
         'screen_process_type',  # How the environment processes the screen
         'colour_type',  # Depicts how the screen should be processed with colour
         'prev_states_queue_size',  # How many states to store in the queue for returning the analysed state
-        'policy',  # Chooses which policy to use (eg. DQN)
+        'policy',  # Chooses which policy to use (eg. Basic_NN)
         'policy_parameters',  # The specific parameters for the selected policy (eg. Number of neurons)
         'batch_size',  # The number of batches to analyse per step
         'memory_size',  # How many experiences to save to memory
         'memory_size_start',  # The minimum memory size to start learning
-        'target_update', # How many episodes before the target neural network should be updated with the policy networks weights
+        'target_update',  # How many episodes or steps before the target neural network should be updated
+                          # with the policy networks weights (If DDQL or DQL are used, this is taken after a number of
+                          # steps. If REINFORCE is used, this is taken after a number of episodes)
         'update_factor',  # How many steps per episode before performing a batch weight update
         'reward_scheme',  # An dictionary of custom rewards for different situations
-        'improve_episode_factor'  # Defines how many episodes before optimising the policy (used for policy-gradient methods)
     )
 )
 
@@ -53,10 +57,6 @@ def validate_game_parameters(game_parameters: OptimalParameters):
                                                                "end_decay_linear"],
                             "epsilon greedy reward": ["start", "end", "decay_linear", "reward_incrementation",
                                                       "reward_target", "reward_decay"]}
-
-    # The deep Q learning methods and policy gradient methods
-    deep_q_learning_methods = ["DQL", "DDQL"]
-    policy_gradient_methods = ["reinforce"]
 
     # Interpolation modes
     avaliable_resize_interpolation_modes = ["bilinear", "nearest", "bicubic"]
@@ -112,7 +112,8 @@ def validate_game_parameters(game_parameters: OptimalParameters):
             raise ValueError(
                 f"Left/Top crop value ({game_parameters.crop_values[dimension][0]}) \
                 cannot be larger than Right/Bottom crop value {game_parameters.crop_values[dimension][1]}")
-        if not (1 >= game_parameters.crop_values[dimension][0] >= 0) or not (1 >= game_parameters.crop_values[dimension][1] >= 0):
+        if not (1 >= game_parameters.crop_values[dimension][0] >= 0) or not (
+                1 >= game_parameters.crop_values[dimension][1] >= 0):
             raise ValueError(f"Crop values must be between 0-1")
 
     # Processing type must be supported
@@ -143,13 +144,13 @@ def validate_game_parameters(game_parameters: OptimalParameters):
             raise ValueError(f"Game policy parameters {policy_parameters}\
              of insufficient size: {len(policy_parameters)} != {required_policy_parameters[policy_parameters]}")
 
-    if not(game_parameters.learning_technique in deep_q_learning_methods
-           or game_parameters.learning_technique in policy_gradient_methods):
+    if not (game_parameters.learning_technique in VALUE_BASED_METHODS
+            or game_parameters.learning_technique in POLICY_GRADIENT_METHODS):
         raise ValueError(f"Learning techniques must be one of the following available methods \
-                        {policy_gradient_methods + deep_q_learning_methods}")
+                        {POLICY_GRADIENT_METHODS + VALUE_BASED_METHODS}")
 
     # Following properties are only required for Q-Learning methods
-    if game_parameters.learning_technique in deep_q_learning_methods:
+    if game_parameters.learning_technique in VALUE_BASED_METHODS:
 
         # The memory size must be larger than the batch size, so that the memory can return enough experiences
         # to match the batch size parameter
@@ -173,12 +174,13 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
         # The target update should be small enough that the policy and target networks update enough
         if not (100 >= game_parameters.target_update > 0):
-            raise ValueError(f"Target update factor must be between 1 and 100")
+            raise ValueError(f"Target update factor must be between 1 and 100 for value-based methods")
 
     # Following properties are only needed for policy-gradient methods
     else:
-        if not(0 < game_parameters.improve_episode_factor < 100):
-            raise ValueError(f"Improve episode factor must be between 0-100")
+        # The target update should be small enough that the policy and target networks update enough
+        if not (20 >= game_parameters.target_update > 0):
+            raise ValueError(f"Target update factor must be between 20 and 100 for policy gradient methods")
 
     # Iterates through the reward scheme settings and checks each one is of the correct type
     bool_reward_types = ["use_given_reward", "one_life_game", "normalise_rewards", "end_on_negative"]
@@ -205,7 +207,6 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
 # Retrieves game parameters from JSON files
 def retrieve_game_parameters(atari_game: str, index: int):
-
     # Opens game parameter JSON file
     with open("game_parameters.json", "r") as settings_json_file:
         parameter_handler = json.load(settings_json_file)

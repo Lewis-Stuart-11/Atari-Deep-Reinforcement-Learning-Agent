@@ -2,17 +2,22 @@
 
 import torch
 import random
+import numpy as np
 from torch.distributions import Bernoulli
 from torch.nn import Softmax
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
 
+# Imports the names of all current available policies for referencing
+from avaliable_policy_methods import *
 
 # Handles what actions to take in the environment
 class Agent():
-    def __init__(self, strategy, num_actions):
+    def __init__(self, strategy, num_actions, learning_technique):
         # The strategy for choosing which action to take
         self.strategy = strategy
+
+        self.learning_technique = learning_technique
 
         # Number of actions of the current game
         self.num_actions = num_actions
@@ -20,6 +25,9 @@ class Agent():
 
     # Chooses the new action to take for the agent
     def select_action(self, state, policy_net, episode, reward):
+
+        if self.learning_technique in POLICY_GRADIENT_METHODS:
+            return self.return_action_from_probs(state, policy_net)
 
         # Returns exploration rate
         rate = self.strategy.get_exploration_rate(episode, reward) if self.strategy.use_reward else \
@@ -33,7 +41,14 @@ class Agent():
         else:
             return self.select_exploitative_action(state, policy_net)
 
-    # Returns random action
+    def return_action_from_probs(self, state, policy_net):
+        with torch.no_grad():
+            action_space = np.arange(self.num_actions)
+            action_probs = policy_net(state).to("cpu").squeeze().detach().numpy()
+            action = np.random.choice(action_space, p=action_probs)
+            return torch.tensor([action]).to(self.device)
+
+            # Returns random action
     def select_random_action(self):
         action = random.randrange(self.num_actions)
         return torch.tensor([action]).to(self.device)

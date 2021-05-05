@@ -8,6 +8,9 @@ import torch
 import numpy as np
 from torch.nn import Softmax
 
+# Imports the names of all current available policies for referencing
+from avaliable_policy_methods import *
+
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
 
@@ -37,7 +40,7 @@ class BasicDeepNN(nn.Module):
         t = F.relu(self.fc2(t))
 
         # Returns softmax probabilities for policy gradient methods, else returns normal Q values
-        if self.learning_technique in ["reinforce"]:
+        if self.learning_technique in POLICY_GRADIENT_METHODS:
             t = self.fc3(t)
             t = F.softmax(t, 1)
         else:
@@ -93,7 +96,7 @@ class BasicCNN(nn.Module):
         x = F.relu(self.bn3(self.conv3(x)))
 
         # Returns softmax probabilities for policy gradient methods, else returns normal Q values
-        if self.learning_technique in ["reinforce"]:
+        if self.learning_technique in POLICY_GRADIENT_METHODS:
             x = self.bn3(self.conv3(x))
             x = F.softmax(x, -1)
         else:
@@ -139,7 +142,7 @@ class AdvancedCNN(nn.Module):
                                           )
 
         # Fully connected layer, outputs softmax probabilities
-        elif learning_technique in ["reinforce"]:
+        elif learning_technique in POLICY_GRADIENT_METHODS:
             self.classifier = nn.Sequential(nn.Linear(linear_input_size, neurons_per_layer[3]),
                                             nn.ReLU(True),
                                             nn.Linear(neurons_per_layer[3], outputs),
@@ -169,8 +172,8 @@ def initialise_weights(model):
 class QValues:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    @staticmethod
     # Takes the state action pairs and returns the predicted Q-Values from the policy network
+    @staticmethod
     def get_current(policy_net, states, actions):
         return policy_net(states).gather(dim=1, index=actions.unsqueeze(-1))
 
@@ -185,10 +188,7 @@ class QValues:
         # the state is occurred that ended the episode)
         # In this context, a final state is a state that represents an all black screen
         # Hence all the final states are found (if there are any in a given batch), so that it is known
-        # not to pass these final states to the target network to get a predicted value. These final states
-        # do not have a reward, hence all of the next states are checked, and if it has a reward of 0, then
-        # it is a final state. These final states are represented as True in this case (as it is converted to a boolean)
-        # so it is then known not to include them
+        # not to pass these final states to the target network to get a predicted value.
 
         final_state_locations = last_screens_of_state.flatten(start_dim=1) \
             .max(dim=1)[0].eq(0).type(torch.bool)
@@ -231,11 +231,11 @@ class QValues:
 
         with torch.no_grad():
             # Find the max actions from the policy net
-            argmax_a = policy_net(non_final_states).detach().max(dim=1)[1]
+            max_policy_values = policy_net(non_final_states).detach().max(dim=1)[1]
             # Return values for max actions in target net and the policy net
             values[non_final_state_locations] = target_net(non_final_states).detach().gather(dim=1,
-                                                                                             index=argmax_a.unsqueeze(
-                                                                                                 -1)).squeeze(-1)
+                                                                                             index=max_policy_values.
+                                                                                             unsqueeze(-1)).squeeze(-1)
         return values
 
     # Returns target Q values
@@ -304,6 +304,24 @@ Experience = namedtuple(
     'Experience',
     ('state', 'action', 'next_state', 'reward')
 )
+
+
+# Extracts tensors from experiences
+def extract_tensors(experiences):
+    # Convert batch of Experiences to Experience of batches
+    batch = Experience(*zip(*experiences))
+
+    # This has the following format:
+    # Experience(state = (1,2,3), action = (1,2,3), next_state = (1,2,3), reward = (1,2,3))
+
+    # Assigns each tensor to a variable
+    t1 = torch.cat(batch.state)
+    t2 = torch.cat(batch.action)
+    t3 = torch.cat(batch.reward)
+    t4 = torch.cat(batch.next_state)
+
+    # Returns an tuple of the experiences
+    return t1, t2, t3, t4
 
 
 # Stores all the previous experiences and are returned when optimising policy

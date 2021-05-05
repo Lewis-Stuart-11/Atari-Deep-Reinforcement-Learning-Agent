@@ -29,6 +29,9 @@ from optimal_game_parameters import *
 # Imports functions for handling and visualising results
 from result_handlers import *
 
+# Imports the names of all current available policies for referencing
+from avaliable_policy_methods import *
+
 # Ensures that graph vision can work correctly
 import os
 
@@ -112,31 +115,9 @@ def display_processed_screens(next_state_screen, state_screen_cmap, step):
     plt.close()
 
 
-# Extracts tensors from experiences
-def extract_tensors(experiences):
-    # Convert batch of Experiences to Experience of batches
-    batch = Experience(*zip(*experiences))
-
-    # This has the following format:
-    # Experience(state = (1,2,3), action = (1,2,3), next_state = (1,2,3), reward = (1,2,3))
-
-    # Assigns each tensor to a variable
-    t1 = torch.cat(batch.state)
-    t2 = torch.cat(batch.action)
-    t3 = torch.cat(batch.reward)
-    t4 = torch.cat(batch.next_state)
-
-    # Returns an tuple of the experiences
-    return t1, t2, t3, t4
-
-
 # Trains the agent using deep Q learning
 def train_Q_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Available methods
-    deep_q_learning_methods = ["DQL", "DDQL"]
-    policy_gradient_methods = ["reinforce"]
 
     if not agent_parameters:
         raise ValueError("Agent parameters are not defined")
@@ -156,7 +137,7 @@ def train_Q_agent(em, agent):
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        if learning_technique in deep_q_learning_methods:
+        if learning_technique in VALUE_BASED_METHODS:
             target_net = BasicDeepNN(screen_height, screen_width, em.num_actions_available(),
                                      learning_technique).to(device)
 
@@ -169,7 +150,7 @@ def train_Q_agent(em, agent):
         # Sets default weights
         policy_net.apply(initialise_weights)
 
-        if learning_technique in deep_q_learning_methods:
+        if learning_technique in VALUE_BASED_METHODS:
             target_net = BasicCNN(screen_height, screen_width, em.num_actions_available(), em.num_tensor_outputs,
                                   agent_parameters.policy_parameters, learning_technique).to(device)
 
@@ -180,7 +161,7 @@ def train_Q_agent(em, agent):
 
         policy_net.apply(initialise_weights)
 
-        if learning_technique in deep_q_learning_methods:
+        if learning_technique in VALUE_BASED_METHODS:
             target_net = AdvancedCNN(em.get_screen_height(), em.get_screen_width(),
                                      em.num_actions_available(), em.num_tensor_outputs,
                                      agent_parameters.policy_parameters, learning_technique).to(device)
@@ -189,7 +170,7 @@ def train_Q_agent(em, agent):
         raise Exception("Policy and target networks not established")
 
     # Sets parameters for Deep Q Learning methods
-    if learning_technique in deep_q_learning_methods:
+    if learning_technique in VALUE_BASED_METHODS:
         # Sets the weights and biases to be the same for both networks
         target_net.load_state_dict(policy_net.state_dict())
 
@@ -209,14 +190,14 @@ def train_Q_agent(em, agent):
         improve_step_factor = agent_parameters.update_factor
 
     # Sets parameters for Policy Gradient methods
-    elif learning_technique in policy_gradient_methods:
+    elif learning_technique in POLICY_GRADIENT_METHODS:
         target_net = None
 
         optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
 
         memory = ReplayMemory(50000, None)
 
-        improve_episode_factor = agent_parameters.improve_episode_factor
+        improve_episode_factor = agent_parameters.update_factor
     else:
         raise ValueError("Learning technique not defined")
 
@@ -291,8 +272,9 @@ def train_Q_agent(em, agent):
                 em.render()
 
             # Retrieves a sample if possible to learn from if deep q learning is used
-            if learning_technique in deep_q_learning_methods:
+            if learning_technique in VALUE_BASED_METHODS:
 
+                # Optimisation occurs if a sample can be provided and the number of steps matches the update factor
                 if memory.can_provide_sample(batch_size) and step % improve_step_factor == 0:
                     experiences = memory.sample(batch_size)
 
@@ -304,9 +286,11 @@ def train_Q_agent(em, agent):
                     # Factor in old gradients and biases
                     optimizer.zero_grad()
 
-                    # Extracts the predicted Q values for the states and actions pairs (as predicted by the policy network)
+                    # Extracts the predicted Q-Values for the states and actions pairs
+                    # (as predicted by the policy network)
                     current_q_values = QValues.get_current(policy_net, states, actions)
 
+                    # Extracts the target Q-Values
                     target_q_values = QValues.get_target_Q_Values(policy_net, target_net, next_states,
                                                                   agent_parameters.discount,
                                                                   rewards, learning_technique)
@@ -324,7 +308,7 @@ def train_Q_agent(em, agent):
             # Checks if the episode has finished
             if em.done:
                 # Performs optimisation if the method is policy gradient
-                if learning_technique in policy_gradient_methods:
+                if learning_technique in POLICY_GRADIENT_METHODS:
 
                     if episode % improve_episode_factor == 0:
                         # Returns all the experiences from memory
@@ -405,7 +389,7 @@ def train_Q_agent(em, agent):
                     print(f"Moving_average: {prev_rewards}")
                     print(f"Current epsilon: {round(agent.return_exploration_rate(episode), 3)}")
                     print(f"Time: {total_time[0:total_time.find('.') + 3]}")
-                    if learning_technique in deep_q_learning_methods:
+                    if learning_technique in VALUE_BASED_METHODS:
                         print(f"Training: {memory.can_provide_sample(batch_size)}")
                     else:
                         print("Training: True")
@@ -447,7 +431,7 @@ def train_Q_agent(em, agent):
 
         # Checks to see if the target network needs updating by checking if the episode count is
         # a multiple of the target_update value
-        if agent_parameters.learning_technique in deep_q_learning_methods:
+        if agent_parameters.learning_technique in VALUE_BASED_METHODS:
             if episode % agent_parameters.target_update == 0:
                 target_net.load_state_dict(policy_net.state_dict())
 
@@ -555,9 +539,6 @@ def print_agent_information(em):
     print()
     print(f"New game: {running_atari_game}")
 
-    deep_q_learning_methods = ["DQL", "DDQL"]
-    policy_gradient_methods = ["reinforce"]
-
     # Outputs action and state space
     print(f"Action Space {em.env.action_space}")
     print(f"State Space {em.env.observation_space}")
@@ -609,7 +590,7 @@ def print_agent_information(em):
         print(f"\t-{current_property.capitalize().replace('_', ' ')}: {value}")
     print()
 
-    if agent_parameters.learning_technique in deep_q_learning_methods:
+    if agent_parameters.learning_technique in VALUE_BASED_METHODS:
         print("Replay parameters:")
         print(f"\tNumber of experiences saved replay memory: {agent_parameters.memory_size}")
         print(f"\tMemory start experience size: {agent_parameters.memory_size_start}")
@@ -618,7 +599,7 @@ def print_agent_information(em):
         print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
         print(f"\tExperience batch size: {agent_parameters.batch_size}")
     else:
-        print(f"Episode update factor: {agent_parameters.improve_episode_factor}")
+        print(f"Episode update factor: {agent_parameters.target_update}")
     print()
 
     # CUDA Information is displayed
@@ -680,7 +661,7 @@ def test(policy_name: str):
     test_strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
 
     # Agent is created
-    test_agent = Agent(test_strategy, test_em.num_actions_available())
+    test_agent = Agent(test_strategy, test_em.num_actions_available(), agent_parameters.learning_technique)
 
     self_play(test_net, test_em, test_agent)
 
@@ -795,7 +776,7 @@ def main(arguements):
             raise ValueError("Could not find appropriate epsilon strategy")
 
         # Agent is created
-        agent = Agent(strategy, em.num_actions_available())
+        agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")

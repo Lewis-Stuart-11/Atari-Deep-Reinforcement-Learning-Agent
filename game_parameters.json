@@ -207,13 +207,36 @@
               "update_factor": 6,
               "reward_scheme": {"use_given_reward": true, "lives_change_reward": 0, "one_life_game": false,
                                 "normalise_rewards": false, "end_on_negative": false}
+        },
+        "1": {
+              "learning_technique": "DQL",
+              "learning_rate": 5e-05,
+              "epsilon_strategy": "Epsilon Greedy Linear Advanced",
+              "epsilon_values": {"start": 1, "middle": 0.15, "end": 0.01, "decay_linear": 0.001, "end_decay_linear": 0.00007},
+              "discount": 0.997,
+              "resize": [100, 90],
+              "resize_interpolation_mode": "BILINEAR",
+              "crop_values": {"percentage_crop_width": [0.05, 1], "percentage_crop_height":  [0.25, 0.73]},
+              "screen_process_type": "append",
+              "colour_type": "gray",
+              "prev_states_queue_size": 4,
+              "policy": "CNN_Advanced",
+              "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 512]},
+              "batch_size": 40,
+              "memory_size": 30000,
+              "memory_size_start": 2000,
+              "target_update": 4,
+              "update_factor": 6,
+              "reward_scheme": {"use_given_reward": true, "lives_change_reward": 0, "one_life_game": false,
+                                "normalise_rewards": false, "end_on_negative": false}
         }
       },
+
 
   "CartPole-v0":
       {
         "0": {
-              "learning_technique": "reinforce",
+              "learning_technique": "REINFORCE",
               "learning_rate": 0.001,
               "epsilon_strategy": "Epsilon Greedy Linear",
               "epsilon_values": {"start": 1, "end": 0.1, "decay_linear": 0.01},
