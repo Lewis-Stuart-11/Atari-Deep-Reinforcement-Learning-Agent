@@ -10,27 +10,27 @@ from avaliable_policy_methods import *
 OptimalParameters = namedtuple(
     'OptimalParameters',
     (
-        'learning_technique',  # Whether to use Policy gradient or Deep Q Learning
-        'learning_rate',  # Learning rate of the policy network (how much each change effects the network)
-        'epsilon_strategy',  # The employed strategy for exploration/exploitation of the environment
-        'epsilon_values',  # Epsilon values
-        'discount',  # How impactful future rewards are
-        'resize',  # The final size of the screen to enter into the neural network
+        'learning_technique',         # Whether to use Policy gradient or Deep Q Learning
+        'learning_rate',              # Learning rate of the policy network (how much each change effects the network)
+        'epsilon_strategy',           # The employed strategy for exploration/exploitation of the environment
+        'epsilon_values',             # Epsilon values
+        'discount',                   # How impactful future rewards are
+        'resize',                     # The final size of the screen to enter into the neural network
         'resize_interpolation_mode',  # The pixel conversion technique for resizing the image
-        'crop_values',  # Crop values to reduce the size of the screen
-        'screen_process_type',  # How the environment processes the screen
-        'colour_type',  # Depicts how the screen should be processed with colour
-        'prev_states_queue_size',  # How many states to store in the queue for returning the analysed state
-        'policy',  # Chooses which policy to use (eg. Basic_NN)
-        'policy_parameters',  # The specific parameters for the selected policy (eg. Number of neurons)
-        'batch_size',  # The number of batches to analyse per step
-        'memory_size',  # How many experiences to save to memory
-        'memory_size_start',  # The minimum memory size to start learning
-        'target_update',  # How many episodes or steps before the target neural network should be updated
-                          # with the policy networks weights (If DDQL or DQL are used, this is taken after a number of
-                          # steps. If REINFORCE is used, this is taken after a number of episodes)
-        'update_factor',  # How many steps per episode before performing a batch weight update
-        'reward_scheme',  # An dictionary of custom rewards for different situations
+        'crop_values',                # Crop values to reduce the size of the screen
+        'screen_process_type',        # How the environment processes the screen
+        'colour_type',                # Depicts how the screen should be processed with colour
+        'prev_states_queue_size',     # How many states to store in the queue for returning the analysed state
+        'policy',                     # Chooses which policy to use (eg. Basic_NN)
+        'policy_parameters',          # The specific parameters for the selected policy (eg. Number of neurons)
+        'batch_size',                 # The number of batches to analyse per step
+        'memory_size',                # How many experiences to save to memory
+        'memory_size_start',          # The minimum memory size to start learning
+        'target_update',              # How many episodes or steps before the target neural network should be updated
+                                      # with the policy networks weights
+        'episode_update_factor',
+        'update_factor',              # How many steps per episode before performing a batch weight update
+        'reward_scheme',              # An dictionary of custom rewards for different situations
     )
 )
 
@@ -64,20 +64,6 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Learning rate must be between 1-0
     if not (1 >= game_parameters.learning_rate > 0):
         raise ValueError(f"Learning rate must be between 1 and 0")
-
-    # Epsilon strategy must be valid
-    if game_parameters.epsilon_strategy.lower() not in available_strategies.keys():
-        raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies.keys()} ")
-
-    # Each strategy must contain all appropriate properties and each one must be of a valid value
-    for epsilon_property in available_strategies[game_parameters.epsilon_strategy.lower()]:
-        if epsilon_property not in game_parameters.epsilon_values.keys():
-            raise ValueError(f"Epsilon strategy '{game_parameters.epsilon_strategy}' "
-                             f"must include property: {epsilon_property}")
-
-        if epsilon_property not in ["reward_target", "reward_incrementation"] \
-                and not (0 <= int(game_parameters.epsilon_values[epsilon_property]) <= 1):
-            raise ValueError(f"Epsilon value {epsilon_property} must be between 1-0")
 
     # Discount must be between 1 and 0 to be valid
     if not (1 >= game_parameters.discount > 0):
@@ -152,6 +138,20 @@ def validate_game_parameters(game_parameters: OptimalParameters):
     # Following properties are only required for Q-Learning methods
     if game_parameters.learning_technique in VALUE_BASED_METHODS:
 
+        # Epsilon strategy must be valid
+        if game_parameters.epsilon_strategy.lower() not in available_strategies.keys():
+            raise ValueError(f"Epsilon strategy must be from the available section: {available_strategies.keys()} ")
+
+        # Each strategy must contain all appropriate properties and each one must be of a valid value
+        for epsilon_property in available_strategies[game_parameters.epsilon_strategy.lower()]:
+            if epsilon_property not in game_parameters.epsilon_values.keys():
+                raise ValueError(f"Epsilon strategy '{game_parameters.epsilon_strategy}' "
+                                 f"must include property: {epsilon_property}")
+
+            if epsilon_property not in ["reward_target", "reward_incrementation"] \
+                    and not (0 <= int(game_parameters.epsilon_values[epsilon_property]) <= 1):
+                raise ValueError(f"Epsilon value {epsilon_property} must be between 1-0")
+
         # The memory size must be larger than the batch size, so that the memory can return enough experiences
         # to match the batch size parameter
         if game_parameters.batch_size > game_parameters.memory_size:
@@ -178,8 +178,8 @@ def validate_game_parameters(game_parameters: OptimalParameters):
 
     # Following properties are only needed for policy-gradient methods
     else:
-        # The target update should be small enough that the policy and target networks update enough
-        if not (20 >= game_parameters.target_update > 0):
+        # The update factor should be small enough that the policy and target networks update enough
+        if not (20 >= game_parameters.episode_update_factor > 0):
             raise ValueError(f"Target update factor must be between 20 and 100 for policy gradient methods")
 
     # Iterates through the reward scheme settings and checks each one is of the correct type

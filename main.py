@@ -72,6 +72,9 @@ show_neural_net = True
 # Pass a file name to load in weights and test agent
 test_agent_file = None
 
+# States whether to store results to excel file
+save_results_to_excel = False
+
 # The parameters to use for the current game
 game_parameters = None
 
@@ -84,7 +87,8 @@ agent_parameters = None
 
 def load_settings():
     global running_atari_game, num_training_episodes, use_menu, show_processed_screens, show_neural_net, \
-        test_agent_file, plot_update_episode_factor, save_policy_network_factor, render_agent_factor, parameter_index
+        test_agent_file, plot_update_episode_factor, save_policy_network_factor, render_agent_factor, \
+        parameter_index, save_results_to_excel
 
     with open("settings.json", "r") as settings_json_file:
         try:
@@ -99,6 +103,7 @@ def load_settings():
             show_neural_net = settings["show_neural_net"]
             test_agent_file = settings["test_agent_file"]
             parameter_index = settings["parameter_index"]
+            save_results_to_excel = settings["save_results_to_excel"]
         except BaseException as e:
             print(e)
             print("WARNING: Failed to load settings- using default settings")
@@ -116,7 +121,7 @@ def display_processed_screens(next_state_screen, state_screen_cmap, step):
 
 
 # Trains the agent using deep Q learning
-def train_Q_agent(em, agent):
+def train_agent(em, agent):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if not agent_parameters:
@@ -197,7 +202,7 @@ def train_Q_agent(em, agent):
 
         memory = ReplayMemory(50000, None)
 
-        improve_episode_factor = agent_parameters.update_factor
+        improve_episode_factor = agent_parameters.episode_update_factor
     else:
         raise ValueError("Learning technique not defined")
 
@@ -318,41 +323,8 @@ def train_Q_agent(em, agent):
 
                         optimizer.zero_grad()
 
-                        # Returns rewards as a numpy array
-                        numpy_rewards = np.array(rewards.cpu())
-
-                        # Calculates the associated rewards with the discount factor
-                        discounted_rewards = np.array([float(agent_parameters.discount ** i * rewards[i])
-                                                       for i in range(len(numpy_rewards))])
-
-                        # Finds the cumulative rewards in a given episode
-                        discounted_rewards = np.flip(np.flip(discounted_rewards).cumsum()).copy()
-
-                        # Returns rewards as a tensor
-                        rewards = torch.from_numpy(discounted_rewards).to(device)
-
-                        print("Final rewards")
-                        print(rewards)
-                        print()
-
-                        # Deduces the loss for the policy gradient
-                        logprob = torch.log(policy_net(states))
-
-                        print("Log probabilities")
-                        print(logprob)
-                        print()
-
-                        selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
-
-                        print("Selected log probs")
-                        print(selected_logprobs)
-                        print()
-
-                        loss = -selected_logprobs.mean()
-
-                        print("loss")
-                        print(loss)
-                        print()
+                        loss = PolicyGradient.get_policy_gradient_loss(policy_net, states, actions, rewards,
+                                                                       agent_parameters.discount, learning_technique)
 
                         loss.backward()
 
@@ -375,8 +347,10 @@ def train_Q_agent(em, agent):
                 # Includes all episode information (time, reward, steps)
                 episode_info = {"num_steps": step, "total_reward": episode_reward,
                                 "total_time": total_time[0:total_time.find('.') + 3],
-                                "moving_average": prev_rewards,
-                                "epsilon": round(agent.return_exploration_rate(episode), 4)}
+                                "moving_average": prev_rewards}
+
+                if learning_technique in VALUE_BASED_METHODS:
+                    episode_info["epsilon"] =  round(agent.return_exploration_rate(episode), 4)
 
                 # Appends the episode information
                 episode_durations.append(episode_info)
@@ -387,10 +361,10 @@ def train_Q_agent(em, agent):
                     print(f"Reward: {round(episode_reward, 2)}")
                     print(f"Steps: {step}")
                     print(f"Moving_average: {prev_rewards}")
-                    print(f"Current epsilon: {round(agent.return_exploration_rate(episode), 3)}")
                     print(f"Time: {total_time[0:total_time.find('.') + 3]}")
                     if learning_technique in VALUE_BASED_METHODS:
                         print(f"Training: {memory.can_provide_sample(batch_size)}")
+                        print(f"Current epsilon: {round(agent.return_exploration_rate(episode), 3)}")
                     else:
                         print("Training: True")
                     print()
@@ -400,7 +374,7 @@ def train_Q_agent(em, agent):
                         best_episode_index = (episode, episode_reward)
 
                     # Displays the estimated time remaining based on the previous execution time
-                    if (episode + 1) % 10 == 0 and memory.can_provide_sample(batch_size):
+                    if (episode + 1) % 10 == 0 and episode > 50:
                         prev_time = 0
                         prev_episodes = episode_durations[-10:]
                         for prev_episode in prev_episodes:
@@ -413,7 +387,8 @@ def train_Q_agent(em, agent):
 
                         print(f"Current estimated time left: {round(estimated_time_remaining / 60) // 60} hrs "
                               f"{round(estimated_time_remaining / 60) % 60} mins")
-                        print(f"Current replay memory size: {memory.current_memory_size()}")
+                        if learning_technique in VALUE_BASED_METHODS:
+                            print(f"Current replay memory size: {memory.current_memory_size()}")
                         print()
                         print(f"Best episode number: {best_episode_index[0] + 1}")
                         print(f"Best episode reward: {best_episode_index[1]}")
@@ -439,7 +414,6 @@ def train_Q_agent(em, agent):
         if episode % save_policy_network_factor == 0:
             torch.save(policy_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_{episode}")
 
-    print()
     print("Creating and saving final graph plots")
     print()
 
@@ -447,12 +421,25 @@ def train_Q_agent(em, agent):
     plot(episode_durations, True)
 
     # Writes data to excel file
-    write_final_results(episode_durations, running_atari_game, num_training_episodes, agent_parameters)
+    if save_results_to_excel:
+        print("Saving results to Excel file:")
+        print()
+        write_final_results(episode_durations, running_atari_game, num_training_episodes, agent_parameters)
+
+    # Prints average for the last 1000 episodes
+    last_1000_episodes = [float(episode["total_reward"]) for episode in episode_durations]
+
+    last_1000_episodes = np.array(last_1000_episodes[-1000:])
+
+    print(f"Last 1000 episode average: {round(last_1000_episodes.mean(),2)}")
+    print(f"Standard Diviation: {round(last_1000_episodes.std(),2)}")
+    print()
 
     # Closes environment
     em.close()
 
-    return target_net
+    # Policy Network is returned
+    return policy_net
 
 
 # Agent plays against itself
@@ -467,21 +454,13 @@ def self_play(policy_net, em, agent):
     while True:
         step_start_time = time.time()
 
-        random_value = random.random()
-
-        if 0.5 > random_value:
-            print("Random:")
-            action = agent.select_random_action()
-        else:
-            print("Exploits:")
-            action = agent.select_exploitative_action(state,
-                                                      policy_net)  # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
+        action = agent.select_exploitative_action(state, policy_net)  # if current_frame % (game_FPS/actions_per_second) or (game_FPS/actions_per_second) < 2 else torch.tensor([0]).to(device)
 
         print(f"taking action: {action}")
         print()
 
         # Returns reward
-        reward = em.take_action(action)
+        em.take_action(action)
 
         # Renders environment
         em.render()
@@ -561,13 +540,6 @@ def print_agent_information(em):
         print(f"\t-{scheme.capitalize().replace('_', ' ')}: {reward}")
     print()
 
-    # Parameters for how choices are made
-    print("Epsilon values: ")
-    print(f"\t-Start: {agent_parameters.epsilon_values['start']}")
-    print(f"\t-Decay: {agent_parameters.epsilon_values['decay_linear']}")
-    print(f"\t-End: {agent_parameters.epsilon_values['end']}")
-    print()
-
     # Screen values for how the agent views the environment
     print("Screen values:")
     print(f"\t-Crop width percentage: {agent_parameters.crop_values['percentage_crop_height']}")
@@ -591,6 +563,13 @@ def print_agent_information(em):
     print()
 
     if agent_parameters.learning_technique in VALUE_BASED_METHODS:
+        # Parameters for how choices are made
+        print("Epsilon values: ")
+        print(f"\t-Start: {agent_parameters.epsilon_values['start']}")
+        print(f"\t-Decay: {agent_parameters.epsilon_values['decay_linear']}")
+        print(f"\t-End: {agent_parameters.epsilon_values['end']}")
+        print()
+
         print("Replay parameters:")
         print(f"\tNumber of experiences saved replay memory: {agent_parameters.memory_size}")
         print(f"\tMemory start experience size: {agent_parameters.memory_size_start}")
@@ -599,7 +578,7 @@ def print_agent_information(em):
         print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
         print(f"\tExperience batch size: {agent_parameters.batch_size}")
     else:
-        print(f"Episode update factor: {agent_parameters.target_update}")
+        print(f"Episode update factor: {agent_parameters.episode_update_factor}")
     print()
 
     # CUDA Information is displayed
@@ -753,27 +732,30 @@ def main(arguements):
     try:
         em = return_env_with_atari_game(running_atari_game)
 
-        # Action strategy is set
-        episilon_values = agent_parameters.epsilon_values
+        if agent_parameters.learning_technique in VALUE_BASED_METHODS:
+            # Action strategy is set
+            episilon_values = agent_parameters.epsilon_values
 
-        if agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear":
-            strategy = EpsilonGreedyStrategy(episilon_values["start"], episilon_values["end"],
-                                             episilon_values["linear_decay"])
+            if agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear":
+                strategy = EpsilonGreedyStrategy(episilon_values["start"], episilon_values["end"],
+                                                 episilon_values["linear_decay"])
 
-        elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear advanced":
-            strategy = EpsilonGreedyStrategyAdvanced(episilon_values["start"], episilon_values["middle"],
-                                                     episilon_values["end"], episilon_values["decay_linear"],
-                                                     episilon_values["end_decay_linear"])
+            elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy linear advanced":
+                strategy = EpsilonGreedyStrategyAdvanced(episilon_values["start"], episilon_values["middle"],
+                                                         episilon_values["end"], episilon_values["decay_linear"],
+                                                         episilon_values["end_decay_linear"])
 
-        elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy reward":
-            strategy = EpsilonGreedyRewardStrategy(episilon_values["start"], episilon_values["end"],
-                                                   episilon_values["decay_linear"],
-                                                   episilon_values["reward_incrementation"],
-                                                   episilon_values["reward_target"],
-                                                   episilon_values["reward_decay"])
+            elif agent_parameters.epsilon_strategy.lower() == "epsilon greedy reward":
+                strategy = EpsilonGreedyRewardStrategy(episilon_values["start"], episilon_values["end"],
+                                                       episilon_values["decay_linear"],
+                                                       episilon_values["reward_incrementation"],
+                                                       episilon_values["reward_target"],
+                                                       episilon_values["reward_decay"])
 
+            else:
+                raise ValueError("Could not find appropriate epsilon strategy")
         else:
-            raise ValueError("Could not find appropriate epsilon strategy")
+            strategy = None
 
         # Agent is created
         agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique)
@@ -787,8 +769,8 @@ def main(arguements):
     if train:
         # Total time that the agent has been running
         start_run_time = time.time()
-        policy_net = train_Q_agent(em, agent)
-        final_run_time = str(time.time() - start_run_time)
+        policy_net = train_agent(em, agent)
+        final_run_time = str(round(time.time() - start_run_time, 0))
         torch.save(policy_net.state_dict(), f"network_weights/{running_atari_game}_Policy_Network_Final")
 
         print(f"Final run time: {final_run_time}")

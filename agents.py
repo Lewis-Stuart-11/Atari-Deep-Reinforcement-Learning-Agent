@@ -46,7 +46,7 @@ class Agent():
             action_space = np.arange(self.num_actions)
             action_probs = policy_net(state).to("cpu").squeeze().detach().numpy()
             action = np.random.choice(action_space, p=action_probs)
-            return torch.tensor([action]).to(self.device)
+            return torch.tensor([action], dtype=torch.int64).to(self.device)
 
             # Returns random action
     def select_random_action(self):
@@ -64,6 +64,9 @@ class Agent():
 
     # Returns the current exploration rate
     def return_exploration_rate(self, episode):
+        if not self.strategy:
+            return False
+
         if self.strategy.use_reward:
             return self.strategy.get_exploration_rate(episode, 0)
         else:

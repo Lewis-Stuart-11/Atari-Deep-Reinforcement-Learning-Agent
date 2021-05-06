@@ -263,10 +263,10 @@ class PolicyGradient:
     # Returns policy loss
     @staticmethod
     def get_policy_gradient_loss(policy_net, states, actions, rewards, discount, learning_technique):
-        if learning_technique == "reinforce":
+        if learning_technique == "REINFORCE":
             loss = PolicyGradient.get_reinforce_loss(policy_net, states, actions, rewards, discount)
         else:
-            raise ValueError("Learning technique not defined")
+            raise ValueError("Learning technique not supported")
         return loss
 
     # Returns reinforce loss

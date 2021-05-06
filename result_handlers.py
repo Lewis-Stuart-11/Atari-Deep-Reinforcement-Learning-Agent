@@ -51,7 +51,8 @@ def plot(info_per_episode, final):
     rewards_per_episode = [round(episode["total_reward"], 2) for episode in info_per_episode]
     total_time = [float(episode["total_time"]) for episode in info_per_episode]
     moving_average = [episode["moving_average"] for episode in info_per_episode]
-    epsilon = [float(episode["epsilon"])*100 for episode in info_per_episode]
+    epsilon = [float(episode["epsilon"])*100 for episode in info_per_episode] \
+        if "epsilon" in info_per_episode[0].keys() else None
 
     # Sets up Rewards graph
     plt.figure(4)
@@ -73,7 +74,7 @@ def plot(info_per_episode, final):
     point_intervals = round(len(info_per_episode) / 10)
     if point_intervals < 1:
         point_intervals = 1
-    plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
+    plt.xticks(np.arange(0, len(info_per_episode), point_intervals))
 
     # Saves the final reward plot
     if final:
@@ -91,13 +92,17 @@ def plot(info_per_episode, final):
     plt.plot(steps_per_episode, '-bx', label="Steps")
     plt.plot(rewards_per_episode, '-rx', label="Rewards")
     plt.plot(total_time, '-gx', label="Time")
-    plt.plot(epsilon, '-yx', label="Epsilon")
+    if epsilon:
+        plt.plot(epsilon, '-yx', label="Epsilon")
 
     # Descriptors
     plt.title("Properties for each training episode")
     plt.xlabel("Episode number")
     plt.ylabel("Total per element")
-    plt.legend(["Steps", "Reward", "Time (ms)", "Epsilon"])
+    if epsilon:
+        plt.legend(["Steps", "Reward", "Time (ms)", "Epsilon"])
+    else:
+        plt.legend(["Steps", "Reward", "Time (ms)"])
 
     plt.locator_params(axis='y', nbins=5)
     plt.locator_params(axis='x', nbins=5)
@@ -105,7 +110,7 @@ def plot(info_per_episode, final):
     point_intervals = round(len(info_per_episode) / 10)
     if point_intervals < 1:
         point_intervals = 1
-    plt.xticks(np.arange(1, len(info_per_episode), point_intervals))
+    plt.xticks(np.arange(0, len(info_per_episode), point_intervals))
 
     # Saves the final main plot
     if final:
