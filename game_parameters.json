@@ -47,7 +47,7 @@
           },
         "2": {
               "learning_technique": "REINFORCE",
-              "learning_rate": 2e-05,
+              "learning_rate": 7e-05,
               "discount": 0.99,
               "resize": [84, 84],
               "resize_interpolation_mode": "BILINEAR",
@@ -146,11 +146,11 @@
               "prev_states_queue_size": 1,
               "policy": "CNN_Advanced",
               "policy_parameters": {"kernel_sizes": [8, 4, 3], "strides": [4, 2, 1], "neurons_per_layer": [32, 64, 64, 512]},
-              "batch_size": 50,
+              "batch_size": 30,
               "memory_size": 25000,
               "memory_size_start": 5000,
               "target_update": 4,
-              "update_factor": 10,
+              "update_factor": 6,
               "reward_scheme": {"use_given_reward": false, "lives_change_reward": 0, "one_life_game": true,
                                 "normalise_rewards": false, "end_on_negative": false, "use_custom_env_rewards": true}
         },
