@@ -9,11 +9,11 @@ from torch.nn import Softmax
 random.seed(0)
 
 # Imports the names of all current available policies for referencing
-from avaliable_policy_methods import *
+from avaliable_rl_algorithms import *
 
 # Handles what actions to take in the environment
 class Agent():
-    def __init__(self, strategy, num_actions, learning_technique):
+    def __init__(self, strategy, num_actions, learning_technique, selected_seed):
         # The strategy for choosing which action to take
         self.strategy = strategy
 
@@ -22,6 +22,10 @@ class Agent():
         # Number of actions of the current game
         self.num_actions = num_actions
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        random.seed(selected_seed)
+
+        print(selected_seed)
 
     # Chooses the new action to take for the agent
     def select_action(self, state, policy_net, episode, reward):

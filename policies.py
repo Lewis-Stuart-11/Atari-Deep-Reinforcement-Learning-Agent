@@ -9,10 +9,7 @@ import numpy as np
 from torch.nn import Softmax
 
 # Imports the names of all current available policies for referencing
-from avaliable_policy_methods import *
-
-# Ensures that the results will be the same (same starting random seed each time)
-random.seed(0)
+from avaliable_rl_algorithms import *
 
 
 # A normal deep neural network, takes in the image sizes and uses these as the inputs to the neural network
@@ -288,12 +285,14 @@ class PolicyGradient:
         # Returns rewards as a tensor
         rewards = torch.from_numpy(discounted_rewards).to(device)
 
-        # Deduces the loss for the policy gradient
+        # Calculate logarithmic probabilities
         logprob = torch.log(policy_net(states))
 
-        selected_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
+        # Returned estimated probabilities with reward
+        calculated_logprobs = rewards * torch.gather(logprob, 1, actions.unsqueeze(1)).squeeze()
 
-        loss = -selected_logprobs.mean()
+        # Final mean loss
+        loss = -calculated_logprobs.mean()
 
         return loss
 
@@ -326,13 +325,15 @@ def extract_tensors(experiences):
 
 # Stores all the previous experiences and are returned when optimising policy
 class ReplayMemory():
-    def __init__(self, capacity, start_size):
+    def __init__(self, capacity, start_size, selected_seed):
         self.capacity = capacity
         self.memory = []
         self.push_count = 0
         if not start_size:
             self.start_size = 0
         self.start_size = start_size
+
+        random.seed(selected_seed)
 
     # Pushes the new experience to the replay memory queue
     def push(self, experience):

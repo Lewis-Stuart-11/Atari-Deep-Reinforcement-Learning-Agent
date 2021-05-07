@@ -9,15 +9,14 @@ import math
 
 from abc import ABC, abstractmethod
 
-# Ensures that the results will be the same (same starting random seed each time)
-np.random.seed(0)
-
 
 # Handles the gym environment and all properties regarding game states, this class is abstract as each game
 # has different implementations of state and reward manipulation
 class EnvironmentManager(ABC):
-    def __init__(self, game, crop_factors, resize, screen_process_type,
-                 prev_states_queue_size, colour_type, resize_interpolation_mode, custom_rewards=None):
+    def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size,
+                 colour_type, resize_interpolation_mode, selected_seed, custom_rewards=None):
+
+        np.random.seed(selected_seed)
 
         if custom_rewards is None:
             custom_rewards = {}
@@ -26,7 +25,7 @@ class EnvironmentManager(ABC):
 
         # Initialises gym environment
         self.env = gym.make(game).unwrapped
-        self.env.seed(0)
+        self.env.seed(selected_seed)
         self.env.reset()
 
         # Stores whether the current episode has finished
@@ -378,10 +377,10 @@ class EnvironmentManager(ABC):
 # additional state and reward manipulation
 class EnvironmentManagerGeneral(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                 resize_interpolation_mode, custom_rewards=None):
+                 resize_interpolation_mode, selected_seed, custom_rewards=None):
 
         super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                         resize_interpolation_mode, custom_rewards)
+                         resize_interpolation_mode, selected_seed, custom_rewards)
 
 
     def return_custom_screen(self, screen):
@@ -397,10 +396,10 @@ class EnvironmentManagerGeneral(EnvironmentManager):
 # Pacman environment implementation
 class EnvironmentManagerPacMan(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                 resize_interpolation_mode, custom_rewards=None):
+                 resize_interpolation_mode, selected_seed, custom_rewards=None):
 
         super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                         resize_interpolation_mode, custom_rewards)
+                         resize_interpolation_mode, selected_seed, custom_rewards)
 
         # Stores previous reward information
         self.prev_reward = 0
@@ -624,10 +623,10 @@ class EnvironmentManagerPacMan(EnvironmentManager):
 
 class EnvironmentManagerEnduro(EnvironmentManager):
     def __init__(self, game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                 resize_interpolation_mode, custom_rewards=None):
+                 resize_interpolation_mode, selected_seed, custom_rewards=None):
 
         super().__init__(game, crop_factors, resize, screen_process_type, prev_states_queue_size, colour_type,
-                         resize_interpolation_mode, custom_rewards)
+                         resize_interpolation_mode, selected_seed, custom_rewards)
 
 
     def return_custom_screen(self, screen):

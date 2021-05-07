@@ -30,16 +30,12 @@ from optimal_game_parameters import *
 from result_handlers import *
 
 # Imports the names of all current available policies for referencing
-from avaliable_policy_methods import *
+from avaliable_rl_algorithms import *
 
 # Ensures that graph vision can work correctly
 import os
 
 os.environ["PATH"] += os.pathsep + "C:\\Program Files\\Graphviz\\bin"
-
-# Ensures that the results will be the same (same starting random seed each time)
-random.seed(0)
-np.random.seed(0)
 
 # Default game to play
 running_atari_game = "BreakoutDeterministic-v4"
@@ -81,14 +77,16 @@ game_parameters = None
 # The index in the list of set parameters for each game
 parameter_index = 0
 
+# Set Seed
+selected_seed = 0
+
 # Stores the current parameters for the agent
 agent_parameters = None
-
 
 def load_settings():
     global running_atari_game, num_training_episodes, use_menu, show_processed_screens, show_neural_net, \
         test_agent_file, plot_update_episode_factor, save_policy_network_factor, render_agent_factor, \
-        parameter_index, save_results_to_excel
+        parameter_index, save_results_to_excel, selected_seed
 
     with open("settings.json", "r") as settings_json_file:
         try:
@@ -104,6 +102,7 @@ def load_settings():
             test_agent_file = settings["test_agent_file"]
             parameter_index = settings["parameter_index"]
             save_results_to_excel = settings["save_results_to_excel"]
+            selected_seed = settings["set_seed"]
         except BaseException as e:
             print(e)
             print("WARNING: Failed to load settings- using default settings")
@@ -186,7 +185,7 @@ def train_agent(em, agent):
         optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
 
         # Establishes the replay memory
-        memory = ReplayMemory(agent_parameters.memory_size, agent_parameters.memory_size_start)
+        memory = ReplayMemory(agent_parameters.memory_size, agent_parameters.memory_size_start, selected_seed)
 
         # Number of states in a batch
         batch_size = agent_parameters.batch_size
@@ -200,7 +199,7 @@ def train_agent(em, agent):
 
         optimizer = optim.Adam(params=policy_net.parameters(), lr=agent_parameters.learning_rate)
 
-        memory = ReplayMemory(50000, None)
+        memory = ReplayMemory(50000, None, selected_seed)
 
         improve_episode_factor = agent_parameters.episode_update_factor
     else:
@@ -260,7 +259,7 @@ def train_agent(em, agent):
             state = next_state
 
             # If set, shows how the states are visualised (used for debugging)
-            if show_processed_screens and episode == 1 and step > 200:
+            if show_processed_screens and (step % 200 == 0):
 
                 next_state_screen = next_state.squeeze(0).permute(1, 2, 0).cpu()
 
@@ -518,6 +517,9 @@ def print_agent_information(em):
     print()
     print(f"New game: {running_atari_game}")
 
+    print(f"Selected seed: {selected_seed}")
+    print()
+
     # Outputs action and state space
     print(f"Action Space {em.env.action_space}")
     print(f"State Space {em.env.observation_space}")
@@ -640,7 +642,7 @@ def test(policy_name: str):
     test_strategy = EpsilonGreedyStrategy(episilon_values[0], episilon_values[1], episilon_values[2])
 
     # Agent is created
-    test_agent = Agent(test_strategy, test_em.num_actions_available(), agent_parameters.learning_technique)
+    test_agent = Agent(test_strategy, test_em.num_actions_available(), agent_parameters.learning_technique, selected_seed)
 
     self_play(test_net, test_em, test_agent)
 
@@ -663,13 +665,16 @@ def return_env_with_atari_game(atari_game):
 
         if atari_game == "MsPacmanDeterministic-v4":
             em = EnvironmentManagerPacMan(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                    prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+                                          prev_states_queue_size, colour_type, resize_interpolation_mode,
+                                          selected_seed, reward_scheme)
         elif atari_game == "EnduroDeterministic-v0":
             em = EnvironmentManagerEnduro(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                          prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+                                          prev_states_queue_size, colour_type, resize_interpolation_mode,
+                                          selected_seed, reward_scheme)
         else:
             em = EnvironmentManagerGeneral(atari_game, [crop_width, crop_height], resize, screen_process_type,
-                                    prev_states_queue_size, colour_type, resize_interpolation_mode, reward_scheme)
+                                           prev_states_queue_size, colour_type, resize_interpolation_mode,
+                                           selected_seed, reward_scheme)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")
@@ -683,6 +688,10 @@ def main(arguements):
 
     global running_atari_game, agent_parameters
     agent_parameters = retrieve_game_parameters(running_atari_game, parameter_index)
+
+    # Ensures that the results will be the same according to the seed
+    random.seed(selected_seed)
+    np.random.seed(selected_seed)
 
     # Tests agent if a file name is given
     if test_agent_file is not None:
@@ -758,7 +767,7 @@ def main(arguements):
             strategy = None
 
         # Agent is created
-        agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique)
+        agent = Agent(strategy, em.num_actions_available(), agent_parameters.learning_technique, selected_seed)
 
     except BaseException:
         raise Exception("Failed to load gym environment and agent")

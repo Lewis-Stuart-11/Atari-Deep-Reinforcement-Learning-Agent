@@ -4,7 +4,7 @@ from collections import namedtuple
 import json
 
 # Imports the names of all current available policies for referencing
-from avaliable_policy_methods import *
+from avaliable_rl_algorithms import *
 
 # A template of the game parameters stored in the respective JSON file. Each of the features is explained below
 OptimalParameters = namedtuple(
