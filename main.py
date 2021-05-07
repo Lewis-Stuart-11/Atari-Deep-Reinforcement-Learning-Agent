@@ -7,7 +7,6 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 from itertools import count
 import torch.optim as optim
-from torchviz import make_dot
 import json
 from torch.distributions import Bernoulli
 
@@ -213,6 +212,8 @@ def train_agent(em, agent):
 
     # Creates a visual representation of the neural network and saves it as 'Policy Network diagram'
     if show_neural_net:
+        from torchviz import make_dot
+
         print("Creating neural network diagram")
         returned_values = policy_net(em.get_state())
         make_dot(returned_values,
