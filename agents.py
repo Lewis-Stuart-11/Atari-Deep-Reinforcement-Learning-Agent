@@ -3,8 +3,7 @@
 import torch
 import random
 import numpy as np
-from torch.distributions import Bernoulli
-from torch.nn import Softmax
+
 # Ensures that the results will be the same (same starting random seed each time)
 random.seed(0)
 
@@ -24,8 +23,6 @@ class Agent():
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         random.seed(selected_seed)
-
-        print(selected_seed)
 
     # Chooses the new action to take for the agent
     def select_action(self, state, policy_net, episode, reward):
