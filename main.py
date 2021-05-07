@@ -394,6 +394,20 @@ def train_agent(em, agent):
                         print(f"Best episode reward: {best_episode_index[1]}")
                         print()
 
+                    # Returns the last 1000 episode average and standard deviation, used for report evalulation
+                    if (episode + 1) % 1000 == 0:
+                        # Prints average for the last 1000 episodes
+                        last_1000_episodes = [float(episode["total_reward"]) for episode in episode_durations]
+
+                        last_1000_episodes = np.array(last_1000_episodes[-1000:])
+
+                        print(f"Last 1000 episode average: {round(last_1000_episodes.mean(), 2)}")
+                        print(f"Standard Diviation: {round(last_1000_episodes.std(), 2)}")
+                        print()
+
+                        # Plots performance before closing
+                        plot(episode_durations, True)
+
                 # Draws graph depending on the plot update factor
                 if (episode + 1) % plot_update_episode_factor == 0:
                     # Appends the number of steps
@@ -425,15 +439,6 @@ def train_agent(em, agent):
         print("Saving results to Excel file:")
         print()
         write_final_results(episode_durations, running_atari_game, num_training_episodes, agent_parameters)
-
-    # Prints average for the last 1000 episodes
-    last_1000_episodes = [float(episode["total_reward"]) for episode in episode_durations]
-
-    last_1000_episodes = np.array(last_1000_episodes[-1000:])
-
-    print(f"Last 1000 episode average: {round(last_1000_episodes.mean(),2)}")
-    print(f"Standard Diviation: {round(last_1000_episodes.std(),2)}")
-    print()
 
     # Closes environment
     em.close()
@@ -571,6 +576,18 @@ def print_agent_information(em):
         print(f"\t-Start: {agent_parameters.epsilon_values['start']}")
         print(f"\t-Decay: {agent_parameters.epsilon_values['decay_linear']}")
         print(f"\t-End: {agent_parameters.epsilon_values['end']}")
+
+        ending_first_linear = agent_parameters.epsilon_values['end']
+        if "middle" in  agent_parameters.epsilon_values.keys():
+            print(f"\t-Middle: {agent_parameters.epsilon_values['middle']}")
+            print(f"\t-Decay #2: {agent_parameters.epsilon_values['end_decay_linear']}")
+            ending_first_linear = agent_parameters.epsilon_values['middle']
+
+        episodes_until_epsilon_end = int((float(agent_parameters.epsilon_values['start']) -
+                                          float(ending_first_linear)) /
+                                          float(agent_parameters.epsilon_values['decay_linear']))
+
+        print(f"\t-Episodes until Epsilon middle/end: {episodes_until_epsilon_end}")
         print()
 
         print("Replay parameters:")
@@ -581,6 +598,8 @@ def print_agent_information(em):
         print(f"\tSteps per neural network update: {agent_parameters.update_factor}")
         print(f"\tExperience batch size: {agent_parameters.batch_size}")
     else:
+        print("Using Softmax strategy")
+        print()
         print(f"Episode update factor: {agent_parameters.episode_update_factor}")
     print()
 

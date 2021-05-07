@@ -44,7 +44,7 @@ def write_final_results(info_per_episode, default_atari_game, num_training_episo
 
 
 # Plots the current episode statistics
-def plot(info_per_episode, final):
+def plot(info_per_episode, save_plot):
 
     # Declares the number of steps, total reward and total time for each episode
     steps_per_episode = [episode["num_steps"] for episode in info_per_episode]
@@ -53,6 +53,8 @@ def plot(info_per_episode, final):
     moving_average = [episode["moving_average"] for episode in info_per_episode]
     epsilon = [float(episode["epsilon"])*100 for episode in info_per_episode] \
         if "epsilon" in info_per_episode[0].keys() else None
+
+    num_episodes = len(steps_per_episode)
 
     # Sets up Rewards graph
     plt.figure(4)
@@ -77,8 +79,8 @@ def plot(info_per_episode, final):
     plt.xticks(np.arange(0, len(info_per_episode), point_intervals))
 
     # Saves the final reward plot
-    if final:
-        plt.savefig("results/Final_Agent_Reward.png", dpi=300, bbox_inches='tight')
+    if save_plot:
+        plt.savefig(f"results/Reward_{num_episodes}.png", dpi=300, bbox_inches='tight')
         plt.show()
         plt.close()
 
@@ -113,8 +115,8 @@ def plot(info_per_episode, final):
     plt.xticks(np.arange(0, len(info_per_episode), point_intervals))
 
     # Saves the final main plot
-    if final:
-        plt.savefig("results/Final_Episode_Properties.png", dpi=300, bbox_inches='tight')
+    if save_plot:
+        plt.savefig(f"results/Properties_{num_episodes}.png", dpi=300, bbox_inches='tight')
         plt.show()
         plt.close()
 

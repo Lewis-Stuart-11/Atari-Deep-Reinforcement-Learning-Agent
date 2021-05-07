@@ -1,14 +1,14 @@
 {
-  "running_atari_game": "BreakoutDeterministic-v4",
-  "parameter_index": 2,
-  "num_training_episodes": 20000,
+  "running_atari_game": "MsPacmanDeterministic-v4",
+  "parameter_index": 3,
+  "num_training_episodes": 12000,
   "plot_update_episode_factor": 100,
   "save_policy_network_factor": 200,
   "render_agent_factor": 1,
   "show_processed_screens": false,
   "use_menu": false,
   "test_agent_file": null,
-  "show_neural_net": true,
+  "show_neural_net": false,
   "save_results_to_excel": false,
   "set_seed": 0
 }
