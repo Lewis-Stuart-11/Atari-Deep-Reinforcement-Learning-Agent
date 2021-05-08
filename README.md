@@ -34,7 +34,9 @@ How to run:
 	   'default_atari_game' to one of the avaliable atari games (each game must have an 'optimal_game_parameter' namedtuple assigned to it).
 5. A series of parameters for the different games have been set in the 'optimal_game_parameters' file, thescan be edited and rune can be edited and run.
 ## Performance
-#### Breakout
+#### Break out
 ![Break Out Performance](https://media.giphy.com/media/csj5usnHg2u6rUwhzv/giphy.gif)
 #### Enduro
 ![Enduro Performance](https://media3.giphy.com/media/xRCi9lbXAsm8gLMDW8/giphy.gif)
+#### Pacman
+![Pacman Performance](https://media1.giphy.com/media/YgEn2czh567NtVWlCU/giphy.gif)
