@@ -264,7 +264,7 @@
         },
         "2": {
               "learning_technique": "REINFORCE",
-              "learning_rate": 7e-05,
+              "learning_rate": 5e-04,
               "discount": 0.99,
               "resize": [100, 90],
               "resize_interpolation_mode": "BILINEAR",

@@ -510,6 +510,7 @@ def self_play(policy_net, em, agent):
     while True:
         step_start_time = time.time()
 
+        # Select the optimal action
         action = agent.select_exploitative_action(state, policy_net)
 
         # Returns reward
@@ -529,6 +530,8 @@ def self_play(policy_net, em, agent):
             time.sleep(1 / game_FPS)
 
         current_frame += 1
+
+        state = em.get_state()
 
     em.close()
 
