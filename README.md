@@ -32,9 +32,9 @@ How to run:
 	   from the atari_py github page, rather than downloading through PIP.
 4. Now that everything is installed, the program can be executed by running main.py. The game to run can be changed by setting the variable 
 	   'default_atari_game' to one of the avaliable atari games (each game must have an 'optimal_game_parameter' namedtuple assigned to it).
-5. A series of parameters for the different games have been set in the 'optimal_game_parameters' file, thescan be edited and rune can be edited and run.
+5. A series of parameters for the different games have been set in the 'optimal_game_parameters' file, these can be edited and executed.
 ## Performance
-#### Break out
+#### Break Out
 ![Break Out Performance](https://media.giphy.com/media/csj5usnHg2u6rUwhzv/giphy.gif)
 #### Enduro
 ![Enduro Performance](https://media3.giphy.com/media/xRCi9lbXAsm8gLMDW8/giphy.gif)
