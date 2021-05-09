@@ -513,6 +513,10 @@ def self_play(policy_net, em, agent):
         # Select the optimal action
         action = agent.select_exploitative_action(state, policy_net)
 
+        # Chooses a random action keeps each iteration different
+        if 0.08 > random.random():
+            action = agent.select_random_action()
+
         # Returns reward
         em.take_action(action)
 
@@ -548,12 +552,15 @@ def agent_vs_agent(policy_net, em, agent):
 
 
 # Lets the agent play the game either solo, against the user or against another agent
-def play_game(play_type, policy_net, em, agent):
+def play_game(play_type, policy_net, em, agent, start_seed):
     em.reset()
+
+    random.seed(start_seed)
 
     # Single-player agent
     if play_type == 0:
         print("Single player selected")
+        print()
         self_play(policy_net, em, agent)
 
     # Agent vs User
@@ -570,8 +577,11 @@ def play_game(play_type, policy_net, em, agent):
     # Lets the user restart the game
     while True:
         restart = str(input("Restart game? (Enter Y or N) \n>")).lower().strip()
+        print()
         if restart == "y" or restart == "yes":
-            play_game(play_type, policy_net, em, agent)
+
+            # Increments seed so that different outcome for each game
+            play_game(play_type, policy_net, em, agent, start_seed+200)
             return
         elif restart == "n" or restart == "no":
             return
@@ -793,7 +803,7 @@ def main(arguements):
     play_type = 0
 
     # Agent plays the game according to the user play type input
-    play_game(play_type, policy_net, em, agent)
+    play_game(play_type, policy_net, em, agent, selected_seed)
 
     em.close()
 
