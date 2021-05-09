@@ -81,8 +81,9 @@ def plot(info_per_episode, save_plot):
     # Saves the final reward plot
     if save_plot:
         plt.savefig(f"results/Reward_{num_episodes}.png", dpi=300, bbox_inches='tight')
-        plt.show()
-        plt.close()
+        #plt.show()
+
+    plt.close()
 
     plt.pause(0.001)
 
@@ -117,8 +118,9 @@ def plot(info_per_episode, save_plot):
     # Saves the final main plot
     if save_plot:
         plt.savefig(f"results/Properties_{num_episodes}.png", dpi=300, bbox_inches='tight')
-        plt.show()
-        plt.close()
+        #plt.show()
+
+    plt.close()
 
     plt.pause(0.001)
 

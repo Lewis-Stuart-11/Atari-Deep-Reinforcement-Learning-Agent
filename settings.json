@@ -1,7 +1,7 @@
 {
   "running_atari_game": "BreakoutDeterministic-v4",
   "parameter_index": 1,
-  "num_training_episodes": 12000,
+  "num_training_episodes": 100,
   "plot_update_episode_factor": 100,
   "save_policy_network_factor": 200,
   "render_agent_factor": 1,
