@@ -395,7 +395,7 @@ def train_agent(em, agent):
                         print()
 
                     # Returns the last 1000 episode average and standard deviation, used for report evalulation
-                    if (episode + 1) % 10 == 0:
+                    if (episode + 1) % 1000 == 0:
                         # Prints average for the last 1000 episodes
                         last_1000_episodes = [float(episode["total_reward"]) for episode in episode_durations]
 
