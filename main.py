@@ -514,7 +514,7 @@ def self_play(policy_net, em, agent):
         action = agent.select_exploitative_action(state, policy_net)
 
         # Chooses a random action keeps each iteration different
-        if 0.08 > random.random():
+        if 0.05 > random.random():
             action = agent.select_random_action()
 
         # Returns reward
