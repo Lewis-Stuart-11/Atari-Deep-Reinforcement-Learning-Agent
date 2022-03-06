@@ -1,5 +1,6 @@
 # Atarai
 This software package provides utilities and functionality for performing Deep Reinforcement Learning on Atari games.
+The final dissertation project report can be read in the file: 'final_report.pdf'
 ## Structure
 Each of the following files provide the following functionality:
 * Agent- handles on the actions to take given a specified state, this interacts with the set strategy and neural network to return the appropraite action
