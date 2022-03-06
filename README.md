@@ -1,5 +1,6 @@
 # Atarai
 This software package provides utilities and functionality for performing Deep Reinforcement Learning on Atari games.
+## Report
 The final dissertation project report can be read in the file: 'final_report.pdf'
 ## Structure
 Each of the following files provide the following functionality:
